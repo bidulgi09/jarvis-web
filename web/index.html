@@ -1,0 +1,471 @@
+<title>J.A.R.V.I.S. HUD</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;600;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: 좌측 코어(아크 리액터 + 텔레메트리) / 우측 대화 콘솔. 폰에서는 세로로 쌓임. 단일 다크 HUD 룩. */
+:root{
+  --void:#05090f;
+  --panel:#0a1420;
+  --line:#16314a;
+  --hud:#4fd8ff;
+  --hud-dim:#1d6f8a;
+  --text:#d6ecf5;
+  --muted:#6f93a6;
+  --warn:#ffb547;
+  --alert:#ff5a5a;
+  --ok:#5dffb0;
+  --f-display:"Chakra Petch", "Rajdhani", "Segoe UI", sans-serif;
+  --f-body:"IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --f-mono:"JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  color-scheme:dark;
+}
+html,body{height:100%}
+body{background:var(--void);color:var(--text);font-family:var(--f-body);font-size:15px;line-height:1.55;
+  background-image:radial-gradient(ellipse at 30% 20%, rgba(79,216,255,.07), transparent 60%),
+    linear-gradient(rgba(79,216,255,.035) 1px, transparent 1px),linear-gradient(90deg, rgba(79,216,255,.035) 1px, transparent 1px);
+  background-size:auto,32px 32px,32px 32px;}
+.app{min-height:100%;box-sizing:border-box;display:grid;grid-template-columns:minmax(300px,420px) 1fr;gap:20px;
+  padding-block:18px;padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px));
+  max-width:1280px;margin:0 auto}
+@media (max-width:820px){.app{grid-template-columns:1fr}}
+
+header.top{grid-column:1/-1;display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;
+  border-bottom:1px solid var(--line);padding-bottom:10px}
+.brand{font-family:var(--f-display);font-weight:700;letter-spacing:.32em;font-size:20px;color:var(--hud);text-wrap:balance}
+.brand small{display:block;font-weight:400;letter-spacing:.14em;font-size:11px;color:var(--muted);margin-top:2px}
+.sys{font-family:var(--f-mono);font-size:12px;color:var(--muted);display:flex;gap:14px;flex-wrap:wrap}
+.sys b{color:var(--text);font-weight:600}
+.dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--muted);margin-right:6px;vertical-align:1px}
+.dot.on{background:var(--ok);box-shadow:0 0 8px var(--ok)}
+.dot.busy{background:var(--warn);box-shadow:0 0 8px var(--warn)}
+.dot.off{background:var(--alert)}
+
+/* 코어 */
+.core{display:flex;flex-direction:column;gap:16px;min-width:0}
+.reactor{position:relative;aspect-ratio:1;max-width:100%;width:100%}
+.reactor canvas{width:100%;height:100%;display:block}
+.reactor .readout{position:absolute;inset:0;display:grid;place-content:center;text-align:center;pointer-events:none}
+.clock{font-family:var(--f-display);font-weight:600;font-size:clamp(30px,8vw,44px);letter-spacing:.06em;font-variant-numeric:tabular-nums;color:var(--text)}
+.date{font-family:var(--f-mono);font-size:12px;letter-spacing:.16em;color:var(--hud);text-transform:uppercase}
+.state{margin-top:6px;font-family:var(--f-mono);font-size:11px;letter-spacing:.2em;color:var(--muted)}
+
+.tele{border:1px solid var(--line);background:linear-gradient(180deg, rgba(10,20,32,.9), rgba(10,20,32,.6));
+  clip-path:polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px));padding:12px 14px}
+.tele h2{margin:0 0 8px;font-family:var(--f-display);font-size:12px;letter-spacing:.24em;color:var(--hud);font-weight:600;
+  display:flex;justify-content:space-between}
+.tele h2 span{color:var(--muted);font-family:var(--f-mono);letter-spacing:.05em}
+.list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.list li{display:flex;gap:10px;align-items:center;justify-content:space-between;font-size:13px;border-left:2px solid var(--hud-dim);padding:4px 8px;background:rgba(79,216,255,.04)}
+.list li .t{font-family:var(--f-mono);font-variant-numeric:tabular-nums;color:var(--warn)}
+.list li.done{border-left-color:var(--ok);opacity:.65}
+.list li.empty{border-left-color:var(--line);color:var(--muted);background:none}
+.x{background:none;border:0;color:var(--muted);cursor:pointer;font-family:var(--f-mono);font-size:12px;padding:2px 4px}
+.x:hover{color:var(--alert)}
+
+/* 콘솔 */
+.console{display:flex;flex-direction:column;min-width:0;min-height:520px;border:1px solid var(--line);background:rgba(8,16,26,.82)}
+.console .bar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.console .bar h2{margin:0;font-family:var(--f-display);font-size:12px;letter-spacing:.24em;color:var(--hud);font-weight:600}
+.toggles{display:flex;gap:8px;flex-wrap:wrap}
+.chip{font-family:var(--f-mono);font-size:11px;letter-spacing:.08em;border:1px solid var(--line);background:transparent;color:var(--muted);padding:5px 10px;cursor:pointer}
+.chip[aria-pressed="true"]{color:var(--void);background:var(--hud);border-color:var(--hud)}
+.chip:hover{border-color:var(--hud)}
+.log{flex:1;overflow-y:auto;padding:16px 14px;display:flex;flex-direction:column;gap:14px;min-height:280px;max-height:62vh}
+@media (max-width:820px){.log{max-height:none}}
+.msg{max-width:88%;min-width:0}
+.msg .who{font-family:var(--f-mono);font-size:10px;letter-spacing:.22em;color:var(--muted);margin-bottom:3px}
+.msg .body{white-space:pre-wrap;overflow-wrap:anywhere}
+.msg.j .body{border-left:2px solid var(--hud);padding:4px 0 4px 12px}
+.msg.j .who{color:var(--hud)}
+.msg.u{align-self:flex-end;text-align:right}
+.msg.u .body{background:rgba(79,216,255,.08);border:1px solid var(--line);padding:8px 12px;text-align:left}
+.msg.sys .body{font-family:var(--f-mono);font-size:12px;color:var(--warn);border-left:2px solid var(--warn);padding-left:12px}
+.msg .act{margin-top:6px;font-family:var(--f-mono);font-size:11px;color:var(--ok)}
+.msg a{color:var(--hud)}
+.thinking::after{content:"▍";animation:blink 1s steps(2) infinite;color:var(--hud)}
+@keyframes blink{50%{opacity:0}}
+
+.quick{display:flex;gap:8px;flex-wrap:wrap;padding:0 14px 10px}
+.quick button{font-family:var(--f-body);font-size:12px;background:transparent;border:1px dashed var(--hud-dim);color:var(--text);padding:5px 10px;cursor:pointer}
+.quick button:hover{border-style:solid;border-color:var(--hud)}
+
+form.input{display:flex;gap:8px;padding:12px 14px;border-top:1px solid var(--line);align-items:stretch}
+form.input input{flex:1;min-width:0;background:var(--panel);border:1px solid var(--line);color:var(--text);font-family:var(--f-body);font-size:15px;padding:10px 12px}
+form.input input:focus{outline:none;border-color:var(--hud);box-shadow:0 0 0 1px var(--hud)}
+.btn{font-family:var(--f-display);font-weight:600;letter-spacing:.14em;font-size:13px;border:1px solid var(--hud);background:var(--hud);color:var(--void);padding:0 16px;cursor:pointer}
+.btn.ghost{background:transparent;color:var(--hud)}
+.btn.mic[aria-pressed="true"]{background:var(--alert);border-color:var(--alert);color:var(--void)}
+.btn:disabled{opacity:.4;cursor:default}
+button:focus-visible,input:focus-visible{outline:2px solid var(--warn);outline-offset:2px}
+
+body[data-hud="red"]{--hud:#ff5a5a;--hud-dim:#8a2d2d}
+body[data-hud="gold"]{--hud:#ffc94a;--hud-dim:#8a6a1d}
+body[data-hud="green"]{--hud:#5dffb0;--hud-dim:#1d8a5a}
+@media (prefers-reduced-motion:reduce){.thinking::after{animation:none}}
+</style>
+
+<div class="app">
+  <header class="top">
+    <div class="brand">J.A.R.V.I.S.<small>JUST A RATHER VERY INTELLIGENT SYSTEM · MK.I</small></div>
+    <div class="sys">
+      <span><span class="dot" id="linkDot"></span>두뇌 링크 <b id="linkTxt">연결 중</b></span>
+      <span>음성 출력 <b id="ttsTxt">—</b></span>
+      <span>음성 입력 <b id="sttTxt">—</b></span>
+    </div>
+  </header>
+
+  <section class="core" aria-label="코어 상태">
+    <div class="reactor">
+      <canvas id="arc" aria-hidden="true"></canvas>
+      <div class="readout">
+        <div class="clock" id="clock">00:00:00</div>
+        <div class="date" id="date">—</div>
+        <div class="state" id="stateTxt">STANDBY</div>
+      </div>
+    </div>
+
+    <div class="tele">
+      <h2>TIMERS <span id="timerCount">0</span></h2>
+      <ul class="list" id="timers"></ul>
+    </div>
+    <div class="tele">
+      <h2>MEMORY LOG <span id="noteCount">0</span></h2>
+      <ul class="list" id="notes"></ul>
+    </div>
+  </section>
+
+  <section class="console" aria-label="대화">
+    <div class="bar">
+      <h2>COMMS CHANNEL</h2>
+      <div class="toggles">
+        <button class="chip" id="ttsToggle" aria-pressed="true" type="button">VOICE OUT</button>
+        <button class="chip" id="clearBtn" type="button">CLEAR</button>
+      </div>
+    </div>
+    <div class="log" id="log" aria-live="polite"></div>
+    <div class="quick" id="quick">
+      <button type="button" data-q="오늘 브리핑 해줘">브리핑</button>
+      <button type="button" data-q="라면 타이머 3분 맞춰줘">라면 타이머 3분</button>
+      <button type="button" data-q="빨간색 전투 모드로 바꿔">전투 모드</button>
+      <button type="button" data-q="'수행평가 에세이 금요일까지' 메모해둬">메모 남기기</button>
+    </div>
+    <form class="input" id="form">
+      <button class="btn ghost mic" id="micBtn" type="button" aria-pressed="false" title="음성 입력">MIC</button>
+      <input id="box" type="text" autocomplete="off" placeholder="자비스에게 명령하기…" aria-label="명령 입력">
+      <button class="btn" id="sendBtn" type="submit">SEND</button>
+    </form>
+  </section>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const log = $("log"), box = $("box"), form = $("form"), sendBtn = $("sendBtn");
+  const store = {
+    get(k, d){ try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; }catch{ return d; } },
+    set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch{} }
+  };
+
+  // ---------- 상태 ----------
+  let mode = "idle"; // idle | thinking | speaking | listening
+  let notes = store.get("jarvis.notes", []);
+  let timers = []; // {id,label,end,done}
+  let hud = store.get("jarvis.hud", "cyan");
+  let ttsOn = store.get("jarvis.tts", true);
+  let turns = [];
+  let sample = null, canTools = false, ctl = null;
+
+  const RULES = `너는 토니 스타크의 AI 비서 J.A.R.V.I.S.다. 사용자를 "주인님"이라 부르고, 정중하고 침착하며 살짝 위트 있는 영국 집사 같은 말투의 한국어로 답한다.
+답변은 음성으로 읽히므로 2~4문장으로 짧게, 마크다운·이모지·목록 기호 없이 말하듯 쓴다.
+시간·날짜가 필요하면 get_datetime, 타이머는 set_timer, 기억할 일은 add_note, 메모 확인은 list_notes, HUD 색 변경은 set_hud_color, 웹사이트 안내는 show_link 도구를 쓴다.
+도구로 할 수 없는 일(PC 프로그램 실행, 실시간 날씨·뉴스 조회 등)은 아직 연결되지 않은 기능이라고 솔직히 말하고 할 수 있는 대안을 제안한다.`;
+
+  // ---------- 시계 ----------
+  const fmtDate = new Intl.DateTimeFormat("ko-KR",{year:"numeric",month:"2-digit",day:"2-digit",weekday:"short"});
+  function tickClock(){
+    const n = new Date();
+    $("clock").textContent = n.toLocaleTimeString("ko-KR",{hour12:false});
+    $("date").textContent = fmtDate.format(n);
+    let changed = false;
+    for (const t of timers){
+      if (!t.done && Date.now() >= t.end){ t.done = true; changed = true; alarm(t); }
+    }
+    renderTimers();
+  }
+  setInterval(tickClock, 250); tickClock();
+
+  // ---------- 패널 렌더 ----------
+  function renderTimers(){
+    const ul = $("timers"); ul.textContent = "";
+    $("timerCount").textContent = timers.filter(t=>!t.done).length;
+    if (!timers.length){ const li = document.createElement("li"); li.className="empty"; li.textContent="가동 중인 타이머 없음"; ul.append(li); return; }
+    for (const t of timers){
+      const li = document.createElement("li"); if (t.done) li.className = "done";
+      const name = document.createElement("span"); name.textContent = t.label;
+      const left = Math.max(0, Math.ceil((t.end - Date.now())/1000));
+      const tm = document.createElement("span"); tm.className="t";
+      tm.textContent = t.done ? "완료" : `${String(Math.floor(left/60)).padStart(2,"0")}:${String(left%60).padStart(2,"0")}`;
+      const x = document.createElement("button"); x.className="x"; x.type="button"; x.textContent="✕"; x.setAttribute("aria-label", t.label+" 타이머 삭제");
+      x.onclick = () => { timers = timers.filter(o=>o!==t); renderTimers(); };
+      const r = document.createElement("span"); r.style.display="flex"; r.style.gap="6px"; r.append(tm,x);
+      li.append(name, r); ul.append(li);
+    }
+  }
+  function renderNotes(){
+    const ul = $("notes"); ul.textContent = "";
+    $("noteCount").textContent = notes.length;
+    if (!notes.length){ const li = document.createElement("li"); li.className="empty"; li.textContent="저장된 메모 없음 · \"~ 메모해둬\"라고 말해보세요"; ul.append(li); return; }
+    notes.forEach((n,i) => {
+      const li = document.createElement("li");
+      const s = document.createElement("span"); s.textContent = n.text;
+      const x = document.createElement("button"); x.className="x"; x.type="button"; x.textContent="✕"; x.setAttribute("aria-label","메모 삭제");
+      x.onclick = () => { notes.splice(i,1); store.set("jarvis.notes", notes); renderNotes(); };
+      li.append(s,x); ul.append(li);
+    });
+  }
+  function applyHud(c){
+    hud = ["cyan","red","gold","green"].includes(c) ? c : "cyan";
+    if (hud === "cyan") document.body.removeAttribute("data-hud"); else document.body.dataset.hud = hud;
+    store.set("jarvis.hud", hud);
+  }
+  applyHud(hud); renderNotes(); renderTimers();
+
+  // ---------- 메시지 ----------
+  function addMsg(kind, text){
+    const wrap = document.createElement("div"); wrap.className = "msg " + kind;
+    const who = document.createElement("div"); who.className = "who";
+    who.textContent = kind === "u" ? "YOU" : kind === "j" ? "J.A.R.V.I.S." : "SYSTEM";
+    const body = document.createElement("div"); body.className = "body"; body.textContent = text;
+    wrap.append(who, body); log.append(wrap); log.scrollTop = log.scrollHeight;
+    return {wrap, body};
+  }
+  function addAct(msg, text){
+    const a = document.createElement("div"); a.className = "act"; a.textContent = "▸ " + text;
+    msg.wrap.append(a); log.scrollTop = log.scrollHeight;
+  }
+
+  // ---------- 음성 출력 ----------
+  const synth = window.speechSynthesis;
+  let koVoice = null;
+  function pickVoice(){
+    if (!synth) return;
+    const vs = synth.getVoices();
+    koVoice = vs.find(v=>/ko/i.test(v.lang) && /male|남|Injoon|Minsu/i.test(v.name)) || vs.find(v=>/ko/i.test(v.lang)) || null;
+  }
+  if (synth){ pickVoice(); synth.onvoiceschanged = pickVoice; }
+  $("ttsTxt").textContent = synth ? (ttsOn ? "ON" : "OFF") : "미지원";
+  $("ttsToggle").setAttribute("aria-pressed", String(ttsOn && !!synth));
+  $("ttsToggle").onclick = () => {
+    if (!synth) return;
+    ttsOn = !ttsOn; store.set("jarvis.tts", ttsOn);
+    $("ttsToggle").setAttribute("aria-pressed", String(ttsOn));
+    $("ttsTxt").textContent = ttsOn ? "ON" : "OFF";
+    if (!ttsOn) synth.cancel();
+  };
+  function speak(text){
+    if (!synth || !ttsOn || !text) return;
+    try{
+      synth.cancel();
+      const u = new SpeechSynthesisUtterance(text.replace(/[*#_`>]/g,""));
+      u.lang = "ko-KR"; if (koVoice) u.voice = koVoice; u.rate = 1.03; u.pitch = 0.9;
+      u.onstart = () => setMode("speaking");
+      u.onend = u.onerror = () => { if (mode === "speaking") setMode("idle"); };
+      synth.speak(u);
+    }catch{}
+  }
+
+  // ---------- 알람 ----------
+  let actx = null;
+  function beep(){
+    try{
+      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+      [0,0.25,0.5].forEach(d => {
+        const o = actx.createOscillator(), g = actx.createGain();
+        o.type = "sine"; o.frequency.value = 880; g.gain.value = 0.0001;
+        o.connect(g); g.connect(actx.destination);
+        const t = actx.currentTime + d;
+        g.gain.exponentialRampToValueAtTime(0.25, t+0.02); g.gain.exponentialRampToValueAtTime(0.0001, t+0.2);
+        o.start(t); o.stop(t+0.22);
+      });
+    }catch{}
+  }
+  function alarm(t){
+    beep();
+    const line = `주인님, ${t.label} 타이머가 끝났습니다.`;
+    addMsg("j", line); speak(line);
+  }
+
+  // ---------- 도구 ----------
+  const tools = [
+    { name:"get_datetime", description:"현재 날짜, 요일, 시각(사용자 기기 기준)을 돌려준다.",
+      execute(){ const n = new Date(); return { now: n.toLocaleString("ko-KR",{dateStyle:"full",timeStyle:"medium"}), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }; } },
+    { name:"set_timer", description:"초 단위 타이머를 HUD에 추가한다. 끝나면 알람이 울린다. 추가된 타이머 정보를 돌려준다.",
+      inputSchema:{type:"object",properties:{seconds:{type:"number",description:"초 (1~86400)"},label:{type:"string",description:"짧은 이름"}},required:["seconds"]},
+      execute(i){ const s = Math.round(Number(i.seconds)); if (!(s>0 && s<=86400)) throw new Error("seconds는 1~86400 사이여야 함");
+        const t = {id:Date.now(), label:String(i.label||"타이머").slice(0,30), end:Date.now()+s*1000, done:false};
+        timers.push(t); renderTimers(); pendingActs.push(`타이머 설정: ${t.label} · ${s}초`); return {ok:true, label:t.label, seconds:s}; } },
+    { name:"add_note", description:"사용자가 기억해 달라는 내용을 HUD 메모 로그에 저장한다.",
+      inputSchema:{type:"object",properties:{text:{type:"string"}},required:["text"]},
+      execute(i){ const text = String(i.text||"").trim().slice(0,200); if(!text) throw new Error("내용이 비었음");
+        notes.unshift({text, at:Date.now()}); notes = notes.slice(0,30); store.set("jarvis.notes", notes); renderNotes();
+        pendingActs.push("메모 저장: " + text); return {ok:true, count:notes.length}; } },
+    { name:"list_notes", description:"저장된 메모 목록(최신순)을 돌려준다.",
+      execute(){ return notes.map(n => ({text:n.text, saved:new Date(n.at).toLocaleString("ko-KR")})); } },
+    { name:"set_hud_color", description:"HUD 색상을 바꾼다. cyan(기본), red(전투), gold(마크 42), green(헐크버스터 대기) 중 하나.",
+      inputSchema:{type:"object",properties:{color:{type:"string",enum:["cyan","red","gold","green"]}},required:["color"]},
+      execute(i){ applyHud(String(i.color)); pendingActs.push("HUD 색상: " + hud); return {ok:true, color:hud}; } },
+    { name:"show_link", description:"사용자가 열 수 있는 웹사이트 링크를 대화창에 띄운다. 검색이 필요하면 검색 결과 페이지 URL을 만든다.",
+      inputSchema:{type:"object",properties:{title:{type:"string"},url:{type:"string"}},required:["url"]},
+      execute(i){ const url = String(i.url||""); if(!/^https:\/\//.test(url)) throw new Error("https URL만 가능");
+        pendingLinks.push({title:String(i.title||url).slice(0,60), url}); return {ok:true}; } },
+  ];
+  let pendingActs = [], pendingLinks = [];
+
+  // ---------- 두뇌 ----------
+  function setLink(state, txt){ $("linkDot").className = "dot " + state; $("linkTxt").textContent = txt; }
+  function setMode(m){
+    mode = m;
+    $("stateTxt").textContent = {idle:"STANDBY", thinking:"PROCESSING", speaking:"SPEAKING", listening:"LISTENING"}[m] || "STANDBY";
+  }
+  setLink("busy","연결 중");
+  (window.claude?.use ? window.claude.use("sample") : Promise.resolve(null)).then(async s => {
+    sample = s;
+    if (!s){ setLink("off","오프라인"); addMsg("sys","두뇌 링크를 찾지 못했습니다. claude.ai에서 이 페이지를 열어야 대화할 수 있어요."); return; }
+    const lim = await s.limits().catch(()=>null);
+    canTools = !!lim?.tools;
+    setLink("on", canTools ? "온라인 · 도구 사용" : "온라인");
+  });
+
+  addMsg("j","좋은 하루입니다, 주인님. 모든 시스템 정상 가동 중입니다. 무엇을 도와드릴까요?");
+
+  const ERR = {
+    not_granted:"두뇌 사용 권한이 거부되었습니다. 페이지를 새로고침하면 다시 허용할 수 있어요.",
+    rate_limited:"요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.",
+    session_expired:"로그인이 만료되었습니다. 다시 로그인해 주세요.",
+    sampling_disabled:"이 계정에서는 두뇌 연결을 쓸 수 없습니다.",
+    refused:"그 요청은 처리할 수 없습니다. 다르게 말해 주세요.",
+  };
+
+  async function ask(text){
+    text = text.trim(); if (!text) return;
+    if (!sample){ addMsg("sys","두뇌가 아직 연결되지 않았습니다."); return; }
+    if (ctl){ ctl.abort(); }
+    synth?.cancel();
+    addMsg("u", text);
+    turns.push({role:"user", content:text});
+    if (turns.length > 20) turns = turns.slice(-20);
+    while (turns.length && turns[0].role !== "user") turns.shift();
+    const m = addMsg("j",""); m.body.classList.add("thinking");
+    setMode("thinking"); sendBtn.disabled = true;
+    pendingActs = []; pendingLinks = [];
+    ctl = new AbortController(); const myCtl = ctl;
+    const ctx = `[HUD 상태] 현재 시각 ${new Date().toLocaleString("ko-KR")}, 진행 중 타이머 ${timers.filter(t=>!t.done).length}개, 메모 ${notes.length}개.`;
+    const opts = { signal: myCtl.signal, modelTier:"quick", onText: ({text}) => { m.body.classList.remove("thinking"); m.body.textContent = text; log.scrollTop = log.scrollHeight; } };
+    if (canTools) opts.tools = tools; else opts.cache = false;
+    try{
+      const { text: reply } = await sample([{role:"user", content: RULES + "\n\n" + ctx}, ...turns], opts);
+      turns.push({role:"assistant", content:reply});
+      m.body.textContent = reply;
+      speak(reply);
+      if (mode === "thinking") setMode(ttsOn && synth ? "speaking" : "idle");
+    }catch(e){
+      m.body.classList.remove("thinking");
+      if (e?.code === "cancelled"){ m.body.textContent = e.text || "(중단됨)"; }
+      else if (e?.code === "refused"){ m.body.textContent = ""; addMsg("sys", ERR.refused); }
+      else { m.body.textContent = e?.text || ""; addMsg("sys", ERR[e?.code] || "연결이 잠시 끊겼습니다. 다시 보내 주세요."); }
+      if (e?.code === "not_granted" || e?.code === "sampling_disabled") setLink("off","권한 없음");
+      turns.pop();
+      setMode("idle");
+    }finally{
+      for (const a of pendingActs) addAct(m, a);
+      for (const l of pendingLinks){
+        const a = document.createElement("a"); a.href = l.url; a.target = "_blank"; a.rel = "noopener"; a.textContent = "↗ " + l.title;
+        const d = document.createElement("div"); d.className = "act"; d.append(a); m.wrap.append(d);
+      }
+      if (ctl === myCtl){ ctl = null; sendBtn.disabled = false; }
+    }
+  }
+
+  form.addEventListener("submit", e => { e.preventDefault(); const t = box.value; box.value = ""; ask(t); });
+  $("quick").addEventListener("click", e => { const b = e.target.closest("button[data-q]"); if (b) ask(b.dataset.q); });
+  $("clearBtn").onclick = () => { ctl?.abort(); synth?.cancel(); turns = []; log.textContent = ""; addMsg("j","대화 기록을 지웠습니다, 주인님."); setMode("idle"); };
+
+  // ---------- 음성 입력 ----------
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const micBtn = $("micBtn");
+  let rec = null, micBlocked = false;
+  $("sttTxt").textContent = SR ? "대기" : "미지원";
+  if (!SR){ micBtn.disabled = true; micBtn.title = "이 브라우저는 음성 인식을 지원하지 않아요"; }
+  micBtn.onclick = () => {
+    if (!SR || micBlocked) return;
+    if (rec){ rec.stop(); return; }
+    rec = new SR(); rec.lang = "ko-KR"; rec.interimResults = true; rec.continuous = false;
+    let finalText = "";
+    rec.onstart = () => { micBtn.setAttribute("aria-pressed","true"); setMode("listening"); $("sttTxt").textContent = "듣는 중"; };
+    rec.onresult = (ev) => {
+      let interim = "";
+      for (let i = ev.resultIndex; i < ev.results.length; i++){
+        const r = ev.results[i]; if (r.isFinal) finalText += r[0].transcript; else interim += r[0].transcript;
+      }
+      box.value = finalText || interim;
+    };
+    rec.onerror = (ev) => {
+      if (ev.error === "not-allowed" || ev.error === "service-not-allowed"){
+        micBlocked = true; micBtn.disabled = true; $("sttTxt").textContent = "차단됨";
+        addMsg("sys","이 화면에서는 마이크 접근이 막혀 있습니다. 음성 입력은 2단계(로컬 버전)에서 연결할게요. 지금은 타이핑으로 명령해 주세요.");
+      }
+    };
+    rec.onend = () => {
+      micBtn.setAttribute("aria-pressed","false"); if (mode === "listening") setMode("idle");
+      if (!micBlocked) $("sttTxt").textContent = "대기";
+      rec = null;
+      if (finalText.trim()){ box.value = ""; ask(finalText); }
+    };
+    try{ rec.start(); }catch{ rec = null; }
+  };
+
+  // ---------- 아크 리액터 ----------
+  const cv = $("arc"), g = cv.getContext("2d");
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  function size(){ const r = cv.getBoundingClientRect(), d = Math.min(devicePixelRatio||1, 2); cv.width = r.width*d; cv.height = r.height*d; g.setTransform(d,0,0,d,0,0); }
+  addEventListener("resize", size); size();
+  let t0 = performance.now(), energy = 0.3;
+  function draw(now){
+    const t = (now - t0)/1000, W = cv.clientWidth, c = W/2, R = W*0.46;
+    const col = getComputedStyle(document.body).getPropertyValue("--hud").trim() || "#4fd8ff";
+    const target = {idle:.3, thinking:1, speaking:.75, listening:.85}[mode] ?? .3;
+    energy += (target - energy) * 0.06;
+    const pulse = mode === "speaking" ? 0.5 + 0.5*Math.abs(Math.sin(t*9)) : 0.5 + 0.5*Math.sin(t*2);
+    g.clearRect(0,0,W,W);
+    g.save(); g.translate(c,c);
+    // 외곽 눈금
+    g.strokeStyle = col; g.globalAlpha = .35; g.lineWidth = 1;
+    for (let i=0;i<120;i++){ const a = i/120*Math.PI*2; const l = i%10===0 ? 10 : 4;
+      g.beginPath(); g.moveTo(Math.cos(a)*R, Math.sin(a)*R); g.lineTo(Math.cos(a)*(R-l), Math.sin(a)*(R-l)); g.stroke(); }
+    // 회전 링
+    const rings = [[.88, .35, 4, 6],[.76,-.6,2,3],[.64,1.1,6,10]];
+    rings.forEach(([rr, sp, w, segs], k) => {
+      g.save(); g.rotate(reduce ? 0 : t*sp*(0.5+energy));
+      g.lineWidth = w; g.globalAlpha = .45 + .4*energy;
+      for (let s=0;s<segs;s++){ const a0 = s/segs*Math.PI*2, a1 = a0 + Math.PI*2/segs*0.62;
+        g.beginPath(); g.arc(0,0,R*rr,a0,a1); g.stroke(); }
+      g.restore();
+    });
+    // 코어 글로우
+    const core = R*0.42;
+    const grd = g.createRadialGradient(0,0,core*0.1,0,0,core*1.6);
+    grd.addColorStop(0, "rgba(255,255,255,"+(0.25+0.35*energy*pulse)+")");
+    grd.addColorStop(0.35, col); grd.addColorStop(1, "rgba(0,0,0,0)");
+    g.globalAlpha = 0.18 + 0.32*energy; g.fillStyle = grd; g.beginPath(); g.arc(0,0,core*1.6,0,Math.PI*2); g.fill();
+    // 삼각 코일
+    g.globalAlpha = .6; g.lineWidth = 1.5;
+    for (let i=0;i<10;i++){ const a = i/10*Math.PI*2 + (reduce?0:t*0.15);
+      g.beginPath(); g.arc(Math.cos(a)*core*1.05, Math.sin(a)*core*1.05, core*0.18, 0, Math.PI*2); g.stroke(); }
+    g.globalAlpha = .9; g.lineWidth = 2; g.beginPath(); g.arc(0,0,core*0.82,0,Math.PI*2); g.stroke();
+    g.restore();
+    if (!reduce || mode !== "idle") requestAnimationFrame(draw); else setTimeout(()=>requestAnimationFrame(draw), 500);
+  }
+  requestAnimationFrame(draw);
+})();
+</script>
