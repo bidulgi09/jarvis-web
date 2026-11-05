@@ -124,27 +124,52 @@ impl Brain {
                 "systemInstruction": { "parts": [{ "text": system_prompt(&self.toolbox) }] },
                 "contents": hist,
                 "tools": [{ "functionDeclarations": gemini_declarations(&self.toolbox) }],
-                "generationConfig": { "maxOutputTokens": 2048 },
+                "generationConfig": { "maxOutputTokens": 8192 },
             });
 
-            let resp = self
-                .client
-                .post(&url)
-                .header("x-goog-api-key", key)
-                .json(&body)
-                .send()
-                .await
-                .context("Gemini 서버에 연결하지 못했습니다. 인터넷 연결을 확인해 주세요")?;
+            // 무료 모델은 과부하(5xx)나 분당 한도(429)가 잦아서 잠깐 기다렸다 최대 3번까지 다시 묻는다
+            let mut attempt = 0u32;
+            let v: Value = loop {
+                let resp = self
+                    .client
+                    .post(&url)
+                    .header("x-goog-api-key", key)
+                    .json(&body)
+                    .send()
+                    .await
+                    .context("Gemini 서버에 연결하지 못했습니다. 인터넷 연결을 확인해 주세요")?;
 
-            let status = resp.status();
-            let v: Value = resp.json().await.context("Gemini 응답을 읽지 못했습니다")?;
-            if !status.is_success() {
+                let status = resp.status();
+                let v: Value = resp.json().await.context("Gemini 응답을 읽지 못했습니다")?;
+                if status.is_success() {
+                    break v;
+                }
                 let msg = v["error"]["message"].as_str().unwrap_or("알 수 없는 오류");
-                if status.as_u16() == 429 {
-                    bail!("Gemini 무료 사용량을 잠시 다 썼습니다. 1분쯤 뒤에 다시 말씀해 주세요");
+                let code = status.as_u16();
+                let retryable = code == 429 || code >= 500;
+                if retryable && attempt < 2 {
+                    attempt += 1;
+                    let wait = if code == 429 {
+                        2000
+                    } else {
+                        700 * (attempt * attempt) as u64
+                    };
+                    tokio::time::sleep(std::time::Duration::from_millis(wait)).await;
+                    continue;
+                }
+                if code == 429 {
+                    bail!("Gemini 무료 사용량 한도에 걸렸습니다. 1분쯤 뒤에 다시 말씀해 주세요");
+                }
+                if code >= 500 {
+                    bail!("Gemini 서버가 지금 바쁩니다 ({status}). 잠시 후 다시 말씀해 주세요. 계속되면 .env의 JARVIS_MODEL을 gemini-3.1-flash-lite로 바꿔 보세요");
+                }
+                if matches!(code, 401 | 403)
+                    || (code == 400 && msg.to_lowercase().contains("api key"))
+                {
+                    bail!("Gemini가 API 키를 거절했습니다 ({status}). .env의 GEMINI_API_KEY를 확인해 주세요. 서버 메시지: {msg}");
                 }
                 bail!("Gemini API 오류 ({status}): {msg}");
-            }
+            };
 
             let parts = v["candidates"][0]["content"]["parts"]
                 .as_array()

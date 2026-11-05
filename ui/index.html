@@ -102,6 +102,13 @@ body{background:var(--void);color:var(--ink);font-family:var(--f-body);font-size
 .sheet input:focus,.sheet select:focus{outline:none;border-color:rgba(127,243,255,.55)}
 .sheet .note{margin:2px 0 0;font-size:12px;line-height:1.5;color:var(--dim)}
 .sheet .note a{color:var(--holo)}
+.sheet{max-height:calc(100vh - 32px);overflow-y:auto}
+.diag{display:flex;gap:8px;flex-wrap:wrap}
+.diag button{font-family:var(--f-body);font-size:13px;padding:8px 12px;border-radius:10px;border:1px dashed rgba(127,243,255,.4);background:transparent;color:var(--ink);cursor:pointer}
+.diag button:disabled{opacity:.45;cursor:default}
+.diagOut{margin:4px 0 0;padding:10px 12px;border-radius:10px;background:rgba(4,3,12,.7);border:1px solid var(--faint);font-family:var(--f-mono);font-size:12px;line-height:1.6;color:var(--ink);white-space:pre-wrap;overflow-wrap:anywhere;max-height:220px;overflow-y:auto}
+.diagOut.ok{border-color:rgba(127,243,255,.45)}
+.diagOut.bad{border-color:rgba(255,207,138,.6);color:var(--warm)}
 .sheet .acts{display:flex;justify-content:flex-end;gap:10px;margin-top:14px}
 .sheet .acts button{font-family:var(--f-mono);font-size:11px;letter-spacing:.2em;padding:9px 16px;border-radius:20px;border:1px solid var(--faint);background:transparent;color:var(--dim);cursor:pointer}
 .sheet .acts .pri{border-color:rgba(127,243,255,.5);color:var(--holo)}
@@ -210,6 +217,12 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--holo);outline-o
       <option value="small">small · 약 250MB · 한국어가 더 정확함</option>
     </select>
     <p class="note">처음 말할 때 모델을 한 번 내려받고, 이후에는 브라우저에 저장된 것을 씁니다. 음성은 기기 밖으로 나가지 않습니다.</p>
+    <label>진단</label>
+    <div class="diag">
+      <button type="button" id="testGeminiBtn">두뇌 연결 테스트</button>
+      <button type="button" id="testMicBtn">마이크 3초 받아쓰기</button>
+    </div>
+    <pre class="diagOut" id="diagOut" hidden></pre>
     <div class="acts">
       <button type="button" id="cfgCancel">CANCEL</button>
       <button type="submit" class="pri">SAVE</button>
@@ -328,35 +341,70 @@ function webApi(){
   const geminiTools = () => [{ functionDeclarations: WEB_TOOLS.map(({ name, description, input_schema }) =>
     Object.keys(input_schema.properties || {}).length ? { name, description, parameters: input_schema } : { name, description }) }];
 
+  // 무료 모델은 과부하(503)나 분당 한도(429)가 잦다. 잠깐 기다렸다 다시 묻고, 그래도 안 되면 다른 무료 모델로 넘어간다.
+  const GEMINI_FREE = ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.8-flash"];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  let lastGeminiModel = null;
+
+  async function geminiCall(body, models, key = cfg.geminiKey){
+    let lastErr = null;
+    for (const model of models){
+      for (let attempt = 0; attempt < 3; attempt++){
+        let r;
+        try {
+          r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+            method: "POST",
+            headers: { "content-type": "application/json", "x-goog-api-key": key },
+            body: JSON.stringify(body),
+          });
+        } catch {
+          throw new Error("Gemini 서버에 연결하지 못했습니다. 인터넷 연결과, 광고 차단 확장 프로그램이 googleapis.com을 막고 있지 않은지 확인해 주세요.");
+        }
+        const v = await r.json().catch(() => ({}));
+        if (r.ok){ lastGeminiModel = model; return v; }
+
+        const msg = v?.error?.message || "", st = v?.error?.status || "";
+        console.warn(`[jarvis] Gemini ${model} ${r.status} ${st}: ${msg}`);
+        if (r.status === 401 || r.status === 403 || (r.status === 400 && /api.?key|API_KEY/i.test(msg + st)))
+          throw new Error(`Gemini가 API 키를 거절했습니다 (${r.status}). 방금 만든 키라면 몇 분 뒤 다시 해 보고, AI Studio에서 만든 Gemini API 키가 맞는지 확인해 주세요.${msg ? " 서버 메시지: " + msg : ""}`);
+        if (r.status === 400) throw new Error(`Gemini가 요청을 거절했습니다 (400): ${msg}`);
+        if (r.status === 404){ lastErr = new Error(`모델 ${model}을(를) 쓸 수 없습니다.`); break; }
+        if (r.status === 429){
+          lastErr = new Error("Gemini 무료 사용량 한도에 걸렸습니다. 1분쯤 뒤에 다시 말씀해 주세요. 계속 막히면 오늘 한도를 다 쓴 것입니다.");
+          if (attempt === 0){ await sleep(2000); continue; }
+          break;                                         // 모델마다 한도가 따로라 다음 모델로
+        }
+        if (r.status >= 500){
+          lastErr = new Error(`Gemini 서버가 지금 바쁩니다 (${r.status}). 잠시 후 다시 말씀해 주세요.`);
+          if (attempt < 2){ await sleep(700 * (attempt + 1) ** 2); continue; }
+          break;
+        }
+        throw new Error(`Gemini 오류 (${r.status}): ${msg}`);
+      }
+    }
+    throw lastErr || new Error("Gemini가 응답하지 않습니다.");
+  }
+
   async function askGemini(text){
     const rollback = ghist.length;
     ghist.push({ role: "user", parts: [{ text }] });
+    // 첫 요청만 대체 모델을 허용하고, 그 턴의 도구 왕복은 답한 모델로 고정한다 (thoughtSignature가 모델별이라)
+    let models = [cfg.brain, ...GEMINI_FREE.filter(m => m !== cfg.brain && BRAINS[cfg.brain].provider === "gemini")];
     try {
       for (let round = 0; round < 6; round++){
-        let r;
-        try {
-          r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(cfg.brain)}:generateContent`, {
-            method: "POST",
-            headers: { "content-type": "application/json", "x-goog-api-key": cfg.geminiKey },
-            body: JSON.stringify({
-              systemInstruction: { parts: [{ text: webSystemPrompt() }] },
-              contents: ghist, tools: geminiTools(),
-              generationConfig: { maxOutputTokens: 2048 },
-            }),
-          });
-        } catch { throw new Error("Gemini 서버에 연결하지 못했습니다. 인터넷 연결을 확인해 주세요."); }
-        const v = await r.json().catch(() => ({}));
-        if (!r.ok){
-          const msg = v?.error?.message || "";
-          if (r.status === 429) throw new Error("Gemini 무료 사용량을 잠시 다 썼습니다. 1분쯤 뒤에 다시 말씀해 주세요. 계속 막히면 오늘 한도를 다 쓴 것이니 SETTINGS에서 Flash-Lite로 바꿔 보세요.");
-          if (r.status === 400 && /API key/i.test(msg) || r.status === 403) throw new Error("Gemini API 키가 올바르지 않습니다. SETTINGS에서 확인해 주세요.");
-          if (r.status === 404) throw new Error(`모델 ${cfg.brain}을(를) 찾을 수 없습니다. SETTINGS에서 다른 모델을 골라 주세요.`);
-          throw new Error(`Gemini 오류 (${r.status}): ${msg}`);
-        }
+        const v = await geminiCall({
+          systemInstruction: { parts: [{ text: webSystemPrompt() }] },
+          contents: ghist, tools: geminiTools(),
+          generationConfig: { maxOutputTokens: 8192 },
+        }, models);
+        models = [lastGeminiModel];
+        if (round === 0 && lastGeminiModel !== cfg.brain) fire("tool", { name: "fallback:" + lastGeminiModel });
+
         const cand = v.candidates?.[0];
         const parts = cand?.content?.parts || [];
         if (!parts.length){
           if (cand?.finishReason === "SAFETY" || v.promptFeedback?.blockReason) throw new Error("그 요청은 처리할 수 없습니다.");
+          if (cand?.finishReason === "MAX_TOKENS") throw new Error("Gemini가 생각만 하다가 답을 못 냈습니다. 다시 말씀해 주세요.");
           throw new Error("Gemini가 빈 답을 보냈습니다. 다시 말씀해 주세요.");
         }
         // thoughtSignature 등이 붙어 있을 수 있으므로 모델 응답 parts는 손대지 않고 그대로 기록한다
@@ -373,11 +421,23 @@ function webApi(){
           ghist.push({ role: "user", parts: out });
           continue;
         }
-        return parts.filter(p => p.text && !p.thought).map(p => p.text).join("").trim();
+        const reply = parts.filter(p => p.text && !p.thought).map(p => p.text).join("").trim();
+        if (!reply) throw new Error("Gemini가 빈 답을 보냈습니다. 다시 말씀해 주세요.");
+        return reply;
       }
       throw new Error("도구 호출이 너무 길어져서 멈췄습니다.");
     } catch (e) { ghist.length = rollback; throw e; }
     finally { trim(); }
+  }
+
+  // SETTINGS의 'Gemini 연결 테스트': 도구 없이 짧은 요청 하나로 키·모델·네트워크를 확인
+  async function testGemini(key, model){
+    const t0 = performance.now();
+    const chain = [model, ...GEMINI_FREE.filter(m => m !== model)];
+    const v = await geminiCall({ contents: [{ role: "user", parts: [{ text: "연결 테스트입니다. '연결 성공'이라고만 답하세요." }] }],
+      generationConfig: { maxOutputTokens: 1024 } }, chain, key);
+    const text = (v.candidates?.[0]?.content?.parts || []).filter(p => p.text && !p.thought).map(p => p.text).join("").trim();
+    return { model: lastGeminiModel, fellBack: lastGeminiModel !== model, ms: Math.round(performance.now() - t0), text };
   }
 
   async function askAnthropic(text){
@@ -490,7 +550,8 @@ function webApi(){
     return t;
   }
 
-  return {
+  let lastStats = null;
+  const webApiRef = {
     status: async () => {
       await sampleReady;
       const brain = activeKey() ? BRAINS[cfg.brain].label : claudeSample ? "claude.ai 계정" : "";
@@ -509,12 +570,13 @@ function webApi(){
       const proc = actx.createScriptProcessor(4096, 1, 1);
       const mute = actx.createGain(); mute.gain.value = 0;      // 스피커로 되울리지 않게
       const cap = actx.sampleRate * MAX_SEC;
-      rec = { src, proc, mute, chunks: [], len: 0, rate: actx.sampleRate };
+      rec = { src, proc, mute, chunks: [], len: 0, rate: actx.sampleRate, peak: 0, t0: performance.now() };
       const r = rec;
       proc.onaudioprocess = (e) => {
         const ch = e.inputBuffer.getChannelData(0);
         let p = 0; for (let i = 0; i < ch.length; i++){ const a = Math.abs(ch[i]); if (a > p) p = a; }
         fire("mic-level", Math.min(1, p * 1.6));
+        if (p > r.peak) r.peak = p;
         if (r.len < cap){ r.chunks.push(new Float32Array(ch)); r.len += ch.length; }
       };
       src.connect(proc); proc.connect(mute); mute.connect(actx.destination);
@@ -529,18 +591,33 @@ function webApi(){
       const all = new Float32Array(r.len); let off = 0;
       for (const c of r.chunks){ all.set(c, off); off += c.length; }
       const audio = resample(all, r.rate, 16000);
-      if (audio.length < 16000 * 0.3) return "";
+      const stats = lastStats = { heldSec: +((performance.now() - r.t0) / 1000).toFixed(2), micRate: r.rate,
+        capturedSec: +(r.len / r.rate).toFixed(2), samples16k: audio.length, peak: +r.peak.toFixed(3) };
+      if (audio.length < 16000 * 0.3){ stats.text = ""; stats.note = "너무 짧음"; return ""; }
       const opts = { language: "korean", task: "transcribe", chunk_length_s: 30 };
       let asr = await ensureWhisper();
+      const t1 = performance.now();
+      let text;
       try {
-        return cleanText((await asr(audio, opts))?.text);
+        text = cleanText((await asr(audio, opts))?.text);
       } catch (e) {
         if (asrDevice !== "webgpu") throw new Error("받아쓰기에 실패했습니다: " + (e?.message || e));
         console.warn("WebGPU 받아쓰기 실패, CPU로 전환", e);
         asrPromise = null; asr = await ensureWhisper(true);
-        return cleanText((await asr(audio, opts))?.text);
+        text = cleanText((await asr(audio, opts))?.text);
       }
+      Object.assign(stats, { whisper: `whisper-${cfg.whisper} · ${asrDevice === "webgpu" ? "GPU" : "CPU"}`, transcribeMs: Math.round(performance.now() - t1), text });
+      return text;
     },
+    // SETTINGS의 '마이크 3초 테스트'
+    testMic: async (seconds, onTick) => {
+      await webApiRef.startListening();
+      for (let i = seconds; i > 0; i--){ onTick?.(i); await sleep(1000); }
+      onTick?.(0);
+      await webApiRef.stopListening();
+      return lastStats;
+    },
+    testGemini,
     ask: async (text) => {
       await sampleReady;
       if (activeKey()) return provider() === "gemini" ? askGemini(text) : askAnthropic(text);
@@ -550,6 +627,7 @@ function webApi(){
     reset: async () => { hist = []; ghist = []; turns = []; },
     resetWhisper: () => { asrPromise = null; },
   };
+  return webApiRef;
 }
 
 function demoApi(){
@@ -879,7 +957,7 @@ try { if (localStorage.getItem("jarvis.hand") === "on") startHand(); } catch {}
 // ======================================================================
 on("mic-level", (v) => { micLevel = Math.max(0, Math.min(1, +v || 0)); });
 on("hologram", (m) => { if (PALETTES[m]) mood = m; });
-on("tool", (p) => logLine("tool", "", "▸ " + (TOOL_NAMES[p?.name] || p?.name)));
+on("tool", (p) => logLine("tool", "", "▸ " + (String(p?.name).startsWith("fallback:") ? "바쁜 모델 대신 " + p.name.slice(9) + " 사용" : (TOOL_NAMES[p?.name] || p?.name))));
 const TOOL_NAMES = { get_datetime:"시각 확인", open_app:"프로그램 실행", open_url:"브라우저 열기", set_volume:"볼륨 조절", set_timer:"타이머 설정", set_hologram:"홀로그램 전환" };
 
 const timers = new Map();
@@ -958,6 +1036,48 @@ function syncKeyFields(){
   $("keyGemini").hidden = !g; $("keyClaude").hidden = g;
 }
 $("cfgModel").addEventListener("change", syncKeyFields);
+
+// 진단: 결과를 사람이 읽을 수 있게 보여준다 (키 값은 절대 출력하지 않음)
+function diag(lines, kind){ const o = $("diagOut"); o.hidden = false; o.className = "diagOut " + (kind || ""); o.textContent = lines.join("\n"); }
+$("testGeminiBtn").onclick = async () => {
+  const model = $("cfgModel").value, prov = BRAINS[model]?.provider;
+  if (prov !== "gemini"){ diag(["두뇌 연결 테스트는 Gemini 모델에서만 할 수 있습니다."], "bad"); return; }
+  const key = $("cfgGeminiKey").value.trim();
+  if (!key){ diag(["Gemini API 키 칸이 비어 있습니다."], "bad"); return; }
+  const btn = $("testGeminiBtn"); btn.disabled = true;
+  diag([`${model}에 연결하는 중…`]);
+  try {
+    const r = await api.testGemini(key, model);
+    diag([
+      "✓ 연결 성공",
+      `응답한 모델: ${r.model}${r.fellBack ? `  (${model}이 바빠서 대신 응답)` : ""}`,
+      `걸린 시간: ${r.ms}ms`,
+      `답: ${r.text || "(빈 답)"}`,
+      `키 형식: ${key.startsWith("AQ.") ? "새 형식(AQ.)" : key.startsWith("AIza") ? "기존 형식(AIza)" : "알 수 없는 형식"}`,
+    ], "ok");
+  } catch (e) {
+    diag(["✗ 연결 실패", String(e.message || e), "",
+      `키 형식: ${key.startsWith("AQ.") ? "새 형식(AQ.)" : key.startsWith("AIza") ? "기존 형식(AIza)" : "알 수 없는 형식 (AI Studio 키가 맞나요?)"}`,
+      "자세한 로그: F12 → Console에서 [jarvis] 줄"], "bad");
+  } finally { btn.disabled = false; }
+};
+$("testMicBtn").onclick = async () => {
+  const btn = $("testMicBtn"); btn.disabled = true;
+  try {
+    const st = await api.testMic(3, (n) => diag(n ? [`말해 보세요… ${n}`, "(예: \"자비스, 라면 타이머 3분 맞춰줘\")"] : ["받아적는 중… (처음이면 모델을 받느라 오래 걸립니다)"]));
+    if (!st){ diag(["녹음이 되지 않았습니다."], "bad"); return; }
+    const quiet = st.peak < 0.02;
+    diag([
+      st.text ? "✓ 받아쓰기 성공" : "✗ 받아적은 내용 없음",
+      `받아적은 문장: ${st.text || "(없음)"}`,
+      `마이크 입력: ${st.capturedSec}초 · ${st.micRate}Hz · 최대 음량 ${st.peak}${quiet ? "  ← 거의 무음. 다른 마이크가 선택됐거나 음소거 상태일 수 있습니다" : ""}`,
+      `Whisper 입력: 16kHz ${st.samples16k}샘플`,
+      st.whisper ? `엔진: ${st.whisper} · 받아쓰기 ${st.transcribeMs}ms` : "",
+    ].filter(Boolean), st.text ? "ok" : "bad");
+  } catch (e) {
+    diag(["✗ 실패", String(e.message || e)], "bad");
+  } finally { btn.disabled = false; }
+};
 function openSettings(){
   $("cfgModel").value = cfg.brain; $("cfgGeminiKey").value = cfg.geminiKey; $("cfgKey").value = cfg.apiKey; $("cfgWhisper").value = cfg.whisper;
   syncKeyFields(); panel.hidden = false;
