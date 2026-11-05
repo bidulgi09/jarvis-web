@@ -1,0 +1,31 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Jarvis",
+  "version": "0.2.0",
+  "identifier": "dev.bidulgi09.jarvis",
+  "build": {
+    "frontendDist": "../ui"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "J.A.R.V.I.S.",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 720,
+        "minHeight": 480,
+        "backgroundColor": "#04030c"
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": ["icons/icon.png", "icons/icon.ico"]
+  }
+}

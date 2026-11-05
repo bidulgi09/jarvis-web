@@ -1,0 +1,676 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>J.A.R.V.I.S. MK.II</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Syncopate:wght@400;700&family=IBM+Plex+Sans+KR:wght@300;400;500&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: 화면 전체가 우주 홀로그램 캔버스, 그 위에 네 귀퉁이 HUD와 하단 자막·입력 바가 떠 있다. 단일 다크 룩. */
+:root{
+  --void:#04030c;
+  --ink:#e8f1ff;
+  --dim:#8a93b8;
+  --faint:rgba(170,185,255,.16);
+  --holo:#7ff3ff;
+  --warm:#ffcf8a;
+  --danger:#ff7a6b;
+  --glass:rgba(10,10,28,.42);
+  --f-display:"Syncopate","Eurostile","Segoe UI",sans-serif;
+  --f-body:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+  --ease:cubic-bezier(.22,.8,.24,1);
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--void);color:var(--ink);font-family:var(--f-body);font-size:15px;overflow:hidden}
+#sky{position:fixed;inset:0;width:100%;height:100%;display:block}
+
+.hud{position:fixed;inset:0;pointer-events:none;display:grid;grid-template-rows:auto 1fr auto;grid-template-columns:minmax(0,1fr);overflow:hidden;
+  padding-block:calc(18px + env(safe-area-inset-top,0px)) calc(16px + env(safe-area-inset-bottom,0px));
+  padding-left:max(20px, env(safe-area-inset-left,0px));padding-right:max(20px, env(safe-area-inset-right,0px))}
+.hud > *{pointer-events:auto}
+.row{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
+
+.brand{font-family:var(--f-display);font-weight:700;font-size:15px;letter-spacing:.42em;color:var(--ink);text-shadow:0 0 18px rgba(127,243,255,.35)}
+.brand small{display:block;margin-top:6px;font-family:var(--f-mono);font-weight:400;font-size:10px;letter-spacing:.24em;color:var(--dim)}
+
+.status{font-family:var(--f-mono);font-size:11px;color:var(--dim);display:grid;grid-template-columns:auto auto;gap:4px 14px;text-align:right;justify-items:end}
+.status b{font-weight:500;color:var(--ink)}
+.status .bad{color:var(--warm)}
+.clock{grid-column:1/-1;font-family:var(--f-display);font-size:22px;letter-spacing:.12em;color:var(--ink);font-variant-numeric:tabular-nums;margin-bottom:6px}
+
+.middle{position:relative;min-height:0}
+.state{position:absolute;left:50%;top:calc(50% + var(--orb-px,120px) + 8vh);transform:translateX(-50%);
+  font-family:var(--f-mono);font-size:11px;letter-spacing:.5em;color:var(--dim);white-space:nowrap;transition:color .6s var(--ease)}
+.state[data-m="listening"]{color:var(--holo)}
+.state[data-m="thinking"]{color:var(--ink)}
+.state[data-m="speaking"]{color:var(--holo)}
+
+.timers{position:absolute;right:0;top:4px;display:flex;flex-direction:column;gap:8px;align-items:flex-end}
+.timer{font-family:var(--f-mono);font-size:12px;padding:6px 12px;background:var(--glass);border:1px solid var(--faint);backdrop-filter:blur(8px);
+  display:flex;gap:12px;align-items:center;animation:rise .7s var(--ease) both}
+.timer .t{color:var(--warm);font-variant-numeric:tabular-nums}
+.timer.done{border-color:var(--warm)}
+
+.log{position:absolute;left:0;top:4px;width:min(340px, 42vw);max-height:62%;overflow-y:auto;display:flex;flex-direction:column;gap:10px;
+  font-size:13px;padding-right:6px;mask-image:linear-gradient(to bottom, transparent, #000 18%)}
+.log[hidden]{display:none}
+.log .l{opacity:.85;animation:rise .6s var(--ease) both}
+.log .l .w{font-family:var(--f-mono);font-size:10px;letter-spacing:.2em;color:var(--dim)}
+.log .l.j .w{color:var(--holo)}
+.log .l.tool{font-family:var(--f-mono);font-size:11px;color:var(--warm)}
+
+.bottom{display:flex;flex-direction:column;align-items:center;gap:14px}
+.caption{max-width:min(760px, 100%);text-align:center;min-height:3.2em}
+.heard{font-size:13px;color:var(--dim);margin-bottom:8px;min-height:1.3em}
+.reply{font-size:clamp(17px, 2.2vw, 22px);font-weight:300;line-height:1.55;text-wrap:balance;text-shadow:0 0 24px rgba(4,3,12,.9)}
+.reply .wd{display:inline-block;animation:wordIn .7s var(--ease) both;white-space:pre}
+.reply.err{color:var(--warm);font-size:15px}
+
+.bar{display:flex;gap:10px;align-items:center;width:min(720px, 100%)}
+.mic{flex:none;width:52px;height:52px;border-radius:50%;border:1px solid rgba(127,243,255,.45);background:rgba(127,243,255,.06);
+  color:var(--holo);cursor:pointer;display:grid;place-items:center;transition:transform .4s var(--ease), background .4s var(--ease), box-shadow .4s var(--ease);touch-action:none}
+.mic svg{width:22px;height:22px}
+.mic[aria-pressed="true"]{background:rgba(127,243,255,.22);transform:scale(1.08);box-shadow:0 0 0 6px rgba(127,243,255,.08), 0 0 32px rgba(127,243,255,.35)}
+.field{flex:1;min-width:0;display:flex;background:var(--glass);border:1px solid var(--faint);backdrop-filter:blur(10px);border-radius:26px;transition:border-color .4s var(--ease)}
+.field:focus-within{border-color:rgba(127,243,255,.5)}
+.field input{flex:1;min-width:0;background:transparent;border:0;color:var(--ink);font:inherit;padding:14px 20px;outline:none}
+.field input:focus-visible{outline:none}
+.field input::placeholder{color:var(--dim)}
+.send{border:0;background:transparent;color:var(--holo);font-family:var(--f-mono);font-size:11px;letter-spacing:.25em;padding:0 18px;cursor:pointer}
+.send:disabled{opacity:.35;cursor:default}
+.hint{font-family:var(--f-mono);font-size:10px;letter-spacing:.18em;color:var(--dim);display:flex;gap:16px;flex-wrap:wrap;justify-content:center}
+.hint kbd{font-family:inherit;border:1px solid var(--faint);padding:1px 6px;border-radius:4px;color:var(--ink)}
+.hint button{background:none;border:0;color:var(--dim);font:inherit;letter-spacing:inherit;cursor:pointer;padding:0}
+.hint button:hover{color:var(--ink)}
+.demo{position:fixed;left:50%;top:calc(14px + env(safe-area-inset-top,0px));transform:translateX(-50%);font-family:var(--f-mono);font-size:10px;letter-spacing:.2em;color:var(--warm);
+  border:1px solid rgba(255,207,138,.35);padding:4px 10px;border-radius:12px;background:rgba(20,12,4,.4);pointer-events:none;white-space:nowrap}
+button:focus-visible,input:focus-visible{outline:2px solid var(--holo);outline-offset:3px}
+
+@keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes wordIn{from{opacity:0;filter:blur(6px);transform:translateY(4px)}to{opacity:1;filter:blur(0);transform:none}}
+
+@media (max-width:720px){
+  .log{display:none}
+  .status{grid-template-columns:auto}
+  .brand{font-size:12px;letter-spacing:.3em;min-width:0}
+  .brand small{letter-spacing:.12em}
+  .clock{font-size:18px}
+  .hint{gap:10px}
+  .demo{top:calc(132px + env(safe-area-inset-top,0px));font-size:9px;letter-spacing:.1em}
+}
+@media (prefers-reduced-motion:reduce){
+  .reply .wd,.timer,.log .l{animation:none}
+}
+</style>
+</head>
+<body>
+<canvas id="sky" aria-hidden="true"></canvas>
+
+<div class="hud">
+  <div class="row">
+    <div class="brand">J.A.R.V.I.S.<small>MK.II · LOCAL WHISPER · CLAUDE</small></div>
+    <div class="status" id="status">
+      <div class="clock" id="clock">00:00</div>
+      <span>두뇌</span><b id="stBrain">확인 중</b>
+      <span>음성인식</span><b id="stEar">확인 중</b>
+    </div>
+  </div>
+
+  <div class="middle">
+    <div class="log" id="log" aria-live="polite"></div>
+    <div class="timers" id="timers"></div>
+    <div class="state" id="state" data-m="idle">STANDBY</div>
+  </div>
+
+  <div class="bottom">
+    <div class="caption">
+      <div class="heard" id="heard"></div>
+      <div class="reply" id="reply"></div>
+    </div>
+    <form class="bar" id="form" autocomplete="off">
+      <button class="mic" id="mic" type="button" aria-pressed="false" aria-label="누르고 있는 동안 말하기">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>
+      </button>
+      <div class="field">
+        <input id="box" type="text" placeholder="말하거나 입력하세요" aria-label="명령 입력">
+        <button class="send" id="send" type="submit">SEND</button>
+      </div>
+    </form>
+    <div class="hint">
+      <span><kbd>Space</kbd> 누르고 있는 동안 말하기</span>
+      <button type="button" id="logBtn">LOG</button>
+      <button type="button" id="voiceBtn">VOICE ON</button>
+      <button type="button" id="resetBtn">RESET</button>
+    </div>
+  </div>
+</div>
+<div class="demo" id="demo" hidden>BROWSER DEMO · 두뇌와 음성인식은 데스크톱 앱에서 동작</div>
+
+<script>
+(() => {
+"use strict";
+const $ = (id) => document.getElementById(id);
+const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+// ======================================================================
+//  브리지: 데스크톱(Tauri)이면 Rust 백엔드, 아니면 브라우저 데모
+// ======================================================================
+const T = window.__TAURI__;
+const isApp = !!(T && T.core && T.core.invoke);
+const listeners = {};
+function on(ev, fn){
+  if (isApp) T.event.listen(ev, (e) => fn(e.payload));
+  else (listeners[ev] ||= []).push(fn);
+}
+function fire(ev, payload){ (listeners[ev] || []).forEach(f => f(payload)); }
+
+const api = isApp ? {
+  status: () => T.core.invoke("status"),
+  startListening: () => T.core.invoke("start_listening"),
+  stopListening: () => T.core.invoke("stop_listening"),
+  ask: (text) => T.core.invoke("ask", { text }),
+  reset: () => T.core.invoke("reset"),
+} : demoApi();
+
+function demoApi(){
+  let micTimer = null, t0 = 0;
+  const wait = (ms) => new Promise(r => setTimeout(r, ms));
+  return {
+    status: async () => ({ demo: true }),
+    startListening: async () => {
+      t0 = performance.now();
+      micTimer = setInterval(() => {
+        const t = (performance.now() - t0) / 1000;
+        const v = Math.max(0, 0.25 + 0.35*Math.sin(t*7.3)*Math.sin(t*2.1) + 0.2*Math.random());
+        fire("mic-level", Math.min(1, v));
+      }, 40);
+    },
+    stopListening: async () => {
+      clearInterval(micTimer); fire("mic-level", 0);
+      await wait(700);
+      return "자비스, 분위기를 성운 모드로 바꿔줘";
+    },
+    ask: async (text) => {
+      await wait(900 + Math.random()*600);
+      const s = text.replace(/\s/g, "");
+      if (/성운|nebula/i.test(s)){ fire("tool",{name:"set_hologram"}); fire("hologram","nebula"); return "성운 모드로 전환했습니다, 주인님. 오늘은 우주가 유난히 보랏빛이군요."; }
+      if (/경계|전투|alert/i.test(s)){ fire("tool",{name:"set_hologram"}); fire("hologram","alert"); return "경계 태세로 전환합니다. 다행히 아직 외계인은 보이지 않습니다."; }
+      if (/집중|공부|focus/i.test(s)){ fire("tool",{name:"set_hologram"}); fire("hologram","focus"); return "집중 모드입니다. 방해 요소는 제가 막아두겠습니다."; }
+      if (/기본|평소|calm/i.test(s)){ fire("tool",{name:"set_hologram"}); fire("hologram","calm"); return "평소 상태로 돌아왔습니다, 주인님."; }
+      if (/타이머/.test(s)){
+        const m = s.match(/(\d+)분/), sec = s.match(/(\d+)초/);
+        const secs = m ? +m[1]*60 : sec ? +sec[1] : 10;
+        const id = Date.now(); fire("tool",{name:"set_timer"}); fire("timer-set",{id,label:"타이머",seconds:secs});
+        setTimeout(() => fire("timer-done",{id,label:"타이머"}), secs*1000);
+        return `${secs >= 60 ? Math.round(secs/60)+"분" : secs+"초"} 타이머를 맞췄습니다.`;
+      }
+      if (/몇시|시간|날짜/.test(s)){ return new Date().toLocaleString("ko-KR",{dateStyle:"long",timeStyle:"short"}) + "입니다, 주인님."; }
+      return "데모 모드라 대답이 한정적입니다, 주인님. '성운 모드', '경계 모드', '타이머 10초'를 말해 보세요.";
+    },
+    reset: async () => {},
+  };
+}
+
+// ======================================================================
+//  상태
+// ======================================================================
+let mode = "idle";          // idle | listening | thinking | speaking
+let mood = "calm";
+let micLevel = 0;           // 0..1 (백엔드에서 40ms마다)
+let speakKick = 0;          // TTS 단어 경계마다 튀는 값
+let voiceOn = true;
+try { voiceOn = localStorage.getItem("jarvis.voice") !== "off"; } catch {}
+
+const STATE_LABEL = { idle:"STANDBY", listening:"LISTENING", thinking:"PROCESSING", speaking:"SPEAKING" };
+function setMode(m){ mode = m; const el = $("state"); el.dataset.m = m; el.textContent = STATE_LABEL[m]; }
+
+// ======================================================================
+//  자막 / 로그
+// ======================================================================
+function showReply(text, isErr=false){
+  const el = $("reply"); el.textContent = ""; el.classList.toggle("err", isErr);
+  if (reduce || isErr){ el.textContent = text; return; }
+  const parts = text.split(/(\s+)/);
+  let i = 0;
+  for (const p of parts){
+    if (!p) continue;
+    if (/^\s+$/.test(p)){ el.append(p); continue; }
+    const s = document.createElement("span"); s.className = "wd"; s.textContent = p;
+    s.style.animationDelay = (i++ * 45) + "ms"; el.append(s);
+  }
+}
+function logLine(kind, who, text){
+  const d = document.createElement("div"); d.className = "l " + kind;
+  if (who){ const w = document.createElement("div"); w.className = "w"; w.textContent = who; d.append(w); }
+  const b = document.createElement("div"); b.textContent = text; d.append(b);
+  const log = $("log"); log.append(d); while (log.children.length > 40) log.firstChild.remove();
+  log.scrollTop = log.scrollHeight;
+}
+
+// ======================================================================
+//  음성 출력 (웹뷰 TTS)
+// ======================================================================
+const synth = window.speechSynthesis;
+let voice = null;
+function pickVoice(){
+  if (!synth) return;
+  const vs = synth.getVoices().filter(v => /^ko/i.test(v.lang));
+  voice = vs.find(v => /Injoon|InJoon|Hyunsu|male|남/i.test(v.name)) || vs.find(v => /Natural|Online/i.test(v.name)) || vs[0] || null;
+}
+if (synth){ pickVoice(); synth.addEventListener?.("voiceschanged", pickVoice); }
+function speak(text){
+  if (!synth || !voiceOn || !text){ setMode("idle"); return; }
+  synth.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = "ko-KR"; if (voice) u.voice = voice; u.rate = 1.02; u.pitch = 0.92;
+  u.onstart = () => setMode("speaking");
+  u.onboundary = () => { speakKick = 1; };
+  u.onend = u.onerror = () => { if (mode === "speaking") setMode("idle"); };
+  setMode("speaking");
+  synth.speak(u);
+}
+function syncVoiceBtn(){ $("voiceBtn").textContent = voiceOn ? "VOICE ON" : "VOICE OFF"; }
+syncVoiceBtn();
+$("voiceBtn").onclick = () => {
+  voiceOn = !voiceOn; syncVoiceBtn();
+  try { localStorage.setItem("jarvis.voice", voiceOn ? "on" : "off"); } catch {}
+  if (!voiceOn){ synth?.cancel(); if (mode === "speaking") setMode("idle"); }
+};
+
+// ======================================================================
+//  대화
+// ======================================================================
+let busy = false;
+async function ask(text){
+  text = (text || "").trim();
+  if (!text || busy) return;
+  busy = true; $("send").disabled = true;
+  synth?.cancel();
+  $("heard").textContent = "“" + text + "”";
+  logLine("u", "YOU", text);
+  setMode("thinking");
+  try{
+    const reply = await api.ask(text);
+    showReply(reply); logLine("j", "J.A.R.V.I.S.", reply);
+    speak(reply);
+  }catch(e){
+    showReply(String(e), true); logLine("tool", "", "오류: " + e); setMode("idle");
+  }finally{
+    busy = false; $("send").disabled = false;
+  }
+}
+$("form").addEventListener("submit", (e) => { e.preventDefault(); const b = $("box"); const t = b.value; b.value = ""; ask(t); });
+
+// ======================================================================
+//  누르고 말하기 (Space 또는 마이크 버튼)
+// ======================================================================
+let holding = false;
+async function pttDown(){
+  if (holding || busy) return;
+  holding = true; synth?.cancel();
+  $("mic").setAttribute("aria-pressed","true");
+  setMode("listening"); $("heard").textContent = "듣고 있습니다…";
+  try{ await api.startListening(); }
+  catch(e){ holding = false; $("mic").setAttribute("aria-pressed","false"); setMode("idle"); $("heard").textContent = ""; showReply(String(e), true); }
+}
+async function pttUp(){
+  if (!holding) return;
+  holding = false; $("mic").setAttribute("aria-pressed","false");
+  setMode("thinking"); $("heard").textContent = "받아적는 중…";
+  let text = "";
+  try{ text = await api.stopListening(); }
+  catch(e){ setMode("idle"); $("heard").textContent = ""; showReply(String(e), true); return; }
+  if (!text){ setMode("idle"); $("heard").textContent = "잘 듣지 못했어요. 다시 말해 주세요."; return; }
+  ask(text);
+}
+const mic = $("mic");
+mic.addEventListener("pointerdown", (e) => { e.preventDefault(); mic.setPointerCapture?.(e.pointerId); pttDown(); });
+mic.addEventListener("pointerup", pttUp);
+mic.addEventListener("pointercancel", pttUp);
+addEventListener("keydown", (e) => {
+  if (e.code !== "Space" || e.repeat || e.target === $("box")) return;
+  e.preventDefault(); pttDown();
+});
+addEventListener("keyup", (e) => { if (e.code === "Space" && e.target !== $("box")) { e.preventDefault(); pttUp(); } });
+addEventListener("blur", pttUp);
+
+// ======================================================================
+//  백엔드 이벤트
+// ======================================================================
+on("mic-level", (v) => { micLevel = Math.max(0, Math.min(1, +v || 0)); });
+on("hologram", (m) => { if (PALETTES[m]) mood = m; });
+on("tool", (p) => logLine("tool", "", "▸ " + (TOOL_NAMES[p?.name] || p?.name)));
+const TOOL_NAMES = { get_datetime:"시각 확인", open_app:"프로그램 실행", open_url:"브라우저 열기", set_volume:"볼륨 조절", set_timer:"타이머 설정", set_hologram:"홀로그램 전환" };
+
+const timers = new Map();
+on("timer-set", ({id, label, seconds}) => {
+  const el = document.createElement("div"); el.className = "timer";
+  const n = document.createElement("span"); n.textContent = label;
+  const t = document.createElement("span"); t.className = "t";
+  el.append(n, t); $("timers").append(el);
+  timers.set(id, { el, t, end: Date.now() + seconds*1000 });
+});
+on("timer-done", ({id, label}) => {
+  const tm = timers.get(id);
+  if (tm){ tm.el.classList.add("done"); tm.t.textContent = "완료"; setTimeout(() => { tm.el.remove(); timers.delete(id); }, 8000); tm.end = 0; }
+  chime();
+  const line = `주인님, ${label}이 끝났습니다.`;
+  showReply(line); logLine("j","J.A.R.V.I.S.", line); speak(line);
+});
+function chime(){
+  try{
+    const ac = new (window.AudioContext || window.webkitAudioContext)();
+    [659.25, 880, 1318.5].forEach((f, i) => {
+      const o = ac.createOscillator(), g = ac.createGain(); o.type = "sine"; o.frequency.value = f;
+      const t = ac.currentTime + i*0.16; g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.18, t + 0.03); g.gain.exponentialRampToValueAtTime(0.0001, t + 1.1);
+      o.connect(g).connect(ac.destination); o.start(t); o.stop(t + 1.2);
+    });
+  }catch{}
+}
+
+$("logBtn").onclick = () => { const l = $("log"); l.hidden = !l.hidden; };
+$("resetBtn").onclick = async () => { synth?.cancel(); await api.reset().catch(()=>{}); $("log").textContent = ""; $("heard").textContent = ""; showReply("대화 기록을 비웠습니다, 주인님."); setMode("idle"); };
+
+// 시계 + 타이머 표시
+function tick(){
+  const n = new Date();
+  $("clock").textContent = n.toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit",hour12:false});
+  for (const [, tm] of timers){
+    if (!tm.end) continue;
+    const s = Math.max(0, Math.ceil((tm.end - Date.now())/1000));
+    tm.t.textContent = String(Math.floor(s/60)).padStart(2,"0") + ":" + String(s%60).padStart(2,"0");
+  }
+}
+setInterval(tick, 250); tick();
+
+// 상태 표시
+(async () => {
+  if (!isApp){
+    $("demo").hidden = false;
+    $("stBrain").textContent = "데모"; $("stEar").textContent = "데모";
+    showReply("좋은 하루입니다, 주인님. 마이크 버튼을 누르고 있거나 '성운 모드로 바꿔줘'라고 입력해 보세요.");
+    return;
+  }
+  try{
+    const s = await api.status();
+    const b = $("stBrain"), e = $("stEar");
+    b.textContent = s.api_key ? s.model : "API 키 없음"; b.classList.toggle("bad", !s.api_key);
+    e.textContent = s.whisper_model_found ? s.whisper_model : "모델 없음"; e.classList.toggle("bad", !s.whisper_model_found);
+    const greet = !s.api_key ? "API 키가 설정되지 않았습니다, 주인님. .env 파일을 확인해 주세요."
+      : !s.whisper_model_found ? "음성 인식 모델이 없습니다. 지금은 입력창으로 말씀해 주세요."
+      : "모든 시스템 정상 가동 중입니다, 주인님. Space를 누르고 말씀하세요.";
+    showReply(greet);
+  }catch(err){ showReply(String(err), true); }
+})();
+
+// ======================================================================
+//  홀로그램 렌더러 (WebGL2)
+// ======================================================================
+const PALETTES = {
+  //            홀로그램 본색          성운                   보조 빛
+  calm:   [[0.47,0.95,1.00], [0.30,0.18,0.72], [0.95,0.55,1.00]],
+  focus:  [[0.78,0.90,1.00], [0.08,0.20,0.52], [0.45,0.85,1.00]],
+  nebula: [[0.96,0.58,1.00], [0.52,0.10,0.58], [0.38,0.86,1.00]],
+  alert:  [[1.00,0.74,0.38], [0.50,0.11,0.10], [1.00,0.38,0.32]],
+};
+
+const canvas = $("sky");
+const gl = canvas.getContext("webgl2", { antialias:false, alpha:false, powerPreference:"high-performance" });
+if (!gl){ document.body.style.background = "radial-gradient(circle at 50% 42%, #1a2a55, #04030c 60%)"; return; }
+
+const SKY_VS = `#version 300 es
+in vec2 aPos; void main(){ gl_Position = vec4(aPos, 0., 1.); }`;
+
+const SKY_FS = `#version 300 es
+precision highp float;
+out vec4 o;
+uniform vec2 uRes, uCenter;
+uniform float uTime, uEnergy, uLevel, uSpeak, uRadius;
+uniform vec3 uColA, uColB, uColC;
+
+float hash(vec2 p){ p = fract(p*vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x*p.y); }
+float noise(vec2 p){
+  vec2 i = floor(p), f = fract(p); vec2 u = f*f*(3. - 2.*f);
+  return mix(mix(hash(i), hash(i + vec2(1,0)), u.x), mix(hash(i + vec2(0,1)), hash(i + vec2(1,1)), u.x), u.y);
+}
+float fbm(vec2 p){
+  float v = 0., a = .5; mat2 m = mat2(1.6, 1.2, -1.2, 1.6);
+  for (int i = 0; i < 5; i++){ v += a*noise(p); p = m*p; a *= .5; }
+  return v;
+}
+vec3 stars(vec2 uv, float t){
+  vec3 c = vec3(0);
+  for (int L = 0; L < 3; L++){
+    float fl = float(L), s = 38. + fl*52.;
+    vec2 g = uv*s + vec2(fl*17.3 + t*0.006*(fl + 1.)*s, fl*5.1);
+    vec2 id = floor(g), f = fract(g) - .5;
+    float h = hash(id + fl*7.1);
+    if (h > .93){
+      vec2 off = vec2(hash(id + 3.1), hash(id + 9.7)) - .5;
+      float d = length(f - off*.7);
+      float tw = .55 + .45*sin(t*(.8 + h*2.6) + h*40.);
+      float b = smoothstep(.07, 0., d)*tw*(h - .93)*14.;
+      b += exp(-d*d*900.)*.4*tw*step(.985, h);
+      c += b*mix(vec3(.72, .84, 1.), vec3(1., .86, .72), hash(id + 1.3));
+    }
+  }
+  return c;
+}
+
+void main(){
+  vec2 fc = gl_FragCoord.xy;
+  vec2 uv = (fc - .5*uRes)/uRes.y;
+  vec2 p = (fc - uCenter)/(uRadius*uRes.y);
+  float r = length(p);
+  float t = uTime;
+
+  // 오브 주변 중력 렌즈 왜곡
+  vec2 lens = p/(r*r + .45)*.055*(.6 + .7*uEnergy);
+  vec2 bg = uv - lens*uRadius;
+
+  // 성운: 도메인 워핑 fbm
+  vec2 q = bg*1.55 + vec2(t*.010, -t*.007);
+  float w1 = fbm(q + 1.5*fbm(q*1.3 + vec2(t*.018, 0.)));
+  float w2 = fbm(q*2.2 - vec2(t*.013, -t*.004) + 3.7);
+  float w3 = fbm(q*.6 + 11.);
+  vec3 col = vec3(.010, .009, .030);
+  col += uColB*pow(w1, 2.4)*1.25;
+  col += uColA*pow(w2, 3.6)*.42;
+  col += uColC*pow(w3, 4.2)*.45;
+  col *= 1. - .6*dot(uv, uv);
+  col += stars(bg, t);
+
+  // 외곽 헤일로
+  float halo = exp(-max(r - 1., 0.)*3.)*(.22 + .45*uEnergy + .35*uLevel);
+  col += uColA*halo*.32*smoothstep(.98, 1.02, r);
+
+  // 홀로그램 구체
+  if (r < 1.){
+    float z = sqrt(1. - r*r);
+    vec3 n = vec3(p, z);
+    float tl = .42, ct = cos(tl), st = sin(tl);
+    n = vec3(n.x, ct*n.y - st*n.z, st*n.y + ct*n.z);
+    float sp = t*.16*(.55 + uEnergy);
+    float cy = cos(sp), sy = sin(sp);
+    n = vec3(cy*n.x + sy*n.z, n.y, -sy*n.x + cy*n.z);
+    float lat = asin(clamp(n.y, -1., 1.));
+    float lon = atan(n.z, n.x);
+    float gLat = abs(fract(lat/3.14159*9.) - .5);
+    float gLon = abs(fract(lon/6.28318*20.) - .5);
+    float aa = fwidth(lat)*3.;
+    float grid = smoothstep(.07 + aa, 0., gLat) + smoothstep(.05 + aa, 0., gLon)*.65;
+    float scan = exp(-pow((n.y - sin(t*.55)*.85)*6.5, 2.));
+    float fres = pow(1. - z, 2.1);
+    float rim = smoothstep(.9, 1., r)*(1. - smoothstep(.985, 1., r));
+    vec3 holo = uColA*(fres*1.15 + grid*(.08 + .38*fres)*(.55 + .8*uEnergy) + scan*.22 + rim*.5);
+    float pulse = .5 + .5*uSpeak + .9*uLevel;
+    holo += mix(uColA, vec3(1.), .55)*exp(-r*r*6.5)*.5*pulse;
+    holo += uColC*.07*sin(lon*5. + t*1.1 + lat*4.)*fres;
+    col = col*(.42 + .45*r) + holo;
+  }
+
+  // 궤도 링 + 그 위를 도는 빛 구슬
+  for (int i = 0; i < 3; i++){
+    float fi = float(i);
+    float R = 1.38 + fi*.34;
+    float inc = 1.16 + fi*.11;
+    float phi = .32 - fi*.58 + sin(t*.045 + fi*1.7)*.09;
+    float c = cos(phi), s = sin(phi);
+    vec2 qq = vec2(c*p.x + s*p.y, -s*p.x + c*p.y);
+    float ci = cos(inc);
+    vec2 e = vec2(qq.x, qq.y/ci);
+    float le = length(e);
+    float d = abs(le - R)*ci*(1. + .6*abs(qq.y)/max(le, .001));
+    float th = .008 + .003*fi;
+    float ring = exp(-pow(d/th, 2.));
+    float glow = exp(-d*16.)*.16;
+    float occl = (e.y > 0. && r < 1.) ? .22 : 1.;
+    float ang = atan(e.y, e.x);
+    float dir = mod(fi, 2.) < .5 ? 1. : -1.;
+    float a0 = t*(.22 + .1*fi)*(.55 + 1.3*uEnergy)*dir + fi*2.1;
+    float da = mod(dir*(ang - a0) + 3.14159, 6.28318) - 3.14159;
+    float bead = exp(-da*da*55.)*exp(-pow(d/.028, 2.));
+    float tail = (da < 0. ? exp(da*2.2) : exp(-da*40.))*exp(-pow(d/.014, 2.));
+    vec3 rc = mix(uColA, uColC, fi*.33);
+    col += rc*((ring*.5 + glow)*(.4 + .6*uEnergy) + bead*1.5 + tail*.45)*occl;
+  }
+
+  col += (hash(fc + fract(t)*100.) - .5)*.010;
+  col = 1. - exp(-col*1.3);
+  o = vec4(col, 1.);
+}`;
+
+const P_VS = `#version 300 es
+in vec4 aP;  // 반지름, 시작 각도, 높이, 시드
+uniform vec2 uRes, uCenter;
+uniform float uTime, uEnergy, uLevel, uRadius, uDpr;
+out float vA; out float vMix;
+void main(){
+  float rr = aP.x;
+  float a = aP.y + uTime*(.85/pow(rr, 1.5))*(.3 + .9*uEnergy);
+  float br = 1. + .035*sin(uTime*.7 + aP.w*6.283) + uLevel*.10*aP.w;
+  vec3 pos = vec3(cos(a)*rr*br, aP.z, sin(a)*rr*br);
+  float tl = 1.22, c = cos(tl), s = sin(tl);
+  pos = vec3(pos.x, c*pos.y - s*pos.z, s*pos.y + c*pos.z);
+  float ph = -.22, cp = cos(ph), sp = sin(ph);
+  pos.xy = vec2(cp*pos.x - sp*pos.y, sp*pos.x + cp*pos.y);
+  float persp = 1./(1. + pos.z*.16);
+  vec2 scr = uCenter + pos.xy*persp*uRadius*uRes.y;
+  gl_Position = vec4(scr/uRes*2. - 1., 0., 1.);
+  float hidden = (pos.z > 0. && length(pos.xy) < 1.) ? .18 : 1.;
+  gl_PointSize = (1.1 + aP.w*2.3)*persp*uDpr*(1. + uLevel*.5);
+  vA = hidden*(.3 + .7*aP.w)*smoothstep(3.7, 1.7, rr)*(.45 + .55*uEnergy);
+  vMix = fract(aP.w*7.13);
+}`;
+
+const P_FS = `#version 300 es
+precision mediump float;
+in float vA; in float vMix;
+uniform vec3 uColA, uColC;
+out vec4 o;
+void main(){
+  float d = length(gl_PointCoord - .5);
+  float a = smoothstep(.5, 0., d); a *= a;
+  o = vec4(mix(uColA, uColC, vMix*.55)*a*vA, 0.);
+}`;
+
+function compile(type, src){
+  const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+function program(vs, fs){
+  const p = gl.createProgram();
+  gl.attachShader(p, compile(gl.VERTEX_SHADER, vs)); gl.attachShader(p, compile(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  const u = {}; const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+  for (let i = 0; i < n; i++){ const name = gl.getActiveUniform(p, i).name; u[name] = gl.getUniformLocation(p, name); }
+  return { p, u };
+}
+
+let sky, parts;
+try { sky = program(SKY_VS, SKY_FS); parts = program(P_VS, P_FS); }
+catch(err){ console.error(err); document.body.style.background = "radial-gradient(circle at 50% 42%, #1a2a55, #04030c 60%)"; return; }
+
+// 화면 전체 삼각형
+const skyVao = gl.createVertexArray(); gl.bindVertexArray(skyVao);
+const qb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, qb);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
+const aPos = gl.getAttribLocation(sky.p, "aPos"); gl.enableVertexAttribArray(aPos); gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+
+// 입자 원반
+const N = 2600;
+const pdata = new Float32Array(N*4);
+function gauss(){ let u = 0, v = 0; while (!u) u = Math.random(); while (!v) v = Math.random(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); }
+for (let i = 0; i < N; i++){
+  const r = 1.22 + Math.pow(Math.random(), 1.8)*2.3;
+  pdata[i*4] = r; pdata[i*4+1] = Math.random()*Math.PI*2;
+  pdata[i*4+2] = gauss()*0.035*r; pdata[i*4+3] = Math.random();
+}
+const pVao = gl.createVertexArray(); gl.bindVertexArray(pVao);
+const pb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, pb); gl.bufferData(gl.ARRAY_BUFFER, pdata, gl.STATIC_DRAW);
+const aP = gl.getAttribLocation(parts.p, "aP"); gl.enableVertexAttribArray(aP); gl.vertexAttribPointer(aP, 4, gl.FLOAT, false, 0, 0);
+gl.bindVertexArray(null);
+
+let W = 0, H = 0, dpr = 1;
+function resize(){
+  dpr = Math.min(devicePixelRatio || 1, 1.5);
+  W = Math.round(canvas.clientWidth*dpr); H = Math.round(canvas.clientHeight*dpr);
+  canvas.width = W; canvas.height = H; gl.viewport(0, 0, W, H);
+}
+addEventListener("resize", resize); resize();
+
+// 모든 값은 목표값을 향해 지수적으로 미끄러진다 → 프레임레이트와 무관하게 부드러운 전환
+const S = { energy:.25, level:0, speak:0, radius:.17, A:[...PALETTES.calm[0]], B:[...PALETTES.calm[1]], C:[...PALETTES.calm[2]] };
+const ease = (x, target, rate, dt) => x + (target - x)*(1 - Math.exp(-rate*dt));
+
+let last = performance.now(), clock = 0;
+function frame(now){
+  const dt = Math.min(.05, (now - last)/1000); last = now;
+  clock += dt*(reduce ? .25 : 1)*(1 + S.energy*.35);
+
+  const targetEnergy = { idle:.22, listening:.62 + micLevel*.4, thinking:.95, speaking:.7 }[mode];
+  S.energy = ease(S.energy, targetEnergy, 2.2, dt);
+  S.level = ease(S.level, micLevel, micLevel > S.level ? 18 : 6, dt);
+  speakKick *= Math.exp(-dt*7);
+  const speakTarget = mode === "speaking" ? .45 + .55*Math.max(speakKick, .5 + .5*Math.sin(clock*8.5)) : 0;
+  S.speak = ease(S.speak, speakTarget, 9, dt);
+  const pal = PALETTES[mood];
+  for (let k = 0; k < 3; k++){ S.A[k] = ease(S.A[k], pal[0][k], 1.4, dt); S.B[k] = ease(S.B[k], pal[1][k], 1.1, dt); S.C[k] = ease(S.C[k], pal[2][k], 1.2, dt); }
+
+  const narrow = W/H < 1;
+  S.radius = ease(S.radius, narrow ? .12 : .165, 3, dt);
+  const cx = W*.5, cy = H*(narrow ? .58 : .56);
+  document.documentElement.style.setProperty("--orb-px", Math.round(S.radius*H/dpr) + "px");
+
+  gl.disable(gl.BLEND);
+  gl.useProgram(sky.p); gl.bindVertexArray(skyVao);
+  const su = sky.u;
+  gl.uniform2f(su.uRes, W, H); gl.uniform2f(su.uCenter, cx, cy);
+  gl.uniform1f(su.uTime, clock); gl.uniform1f(su.uEnergy, S.energy); gl.uniform1f(su.uLevel, S.level);
+  gl.uniform1f(su.uSpeak, S.speak); gl.uniform1f(su.uRadius, S.radius);
+  gl.uniform3fv(su.uColA, S.A); gl.uniform3fv(su.uColB, S.B); gl.uniform3fv(su.uColC, S.C);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+  gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
+  gl.useProgram(parts.p); gl.bindVertexArray(pVao);
+  const pu = parts.u;
+  gl.uniform2f(pu.uRes, W, H); gl.uniform2f(pu.uCenter, cx, cy);
+  gl.uniform1f(pu.uTime, clock); gl.uniform1f(pu.uEnergy, S.energy); gl.uniform1f(pu.uLevel, S.level);
+  gl.uniform1f(pu.uRadius, S.radius); gl.uniform1f(pu.uDpr, dpr);
+  gl.uniform3fv(pu.uColA, S.A); gl.uniform3fv(pu.uColC, S.C);
+  gl.drawArrays(gl.POINTS, 0, N);
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

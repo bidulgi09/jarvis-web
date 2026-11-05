@@ -1,0 +1,30 @@
+[package]
+name = "jarvis"
+version = "0.2.0"
+description = "J.A.R.V.I.S. MK.II - local Whisper + Claude desktop assistant"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+dotenvy = "0.15"
+chrono = "0.4"
+tokio = { version = "1", features = ["sync", "time"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+cpal = "0.15"
+# 0.15부터 세그먼트 API가 바뀌었으므로 0.14 계열로 고정
+whisper-rs = "0.14"
+
+[features]
+# NVIDIA GPU로 Whisper 가속: cargo tauri dev --features cuda
+cuda = ["whisper-rs/cuda"]
+# Apple Silicon 가속
+metal = ["whisper-rs/metal"]
+
+[profile.dev.package.whisper-rs-sys]
+opt-level = 3

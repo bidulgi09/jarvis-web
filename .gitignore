@@ -1,0 +1,5 @@
+/src-tauri/target/
+/src-tauri/gen/
+.env
+/models/*.bin
+.DS_Store
