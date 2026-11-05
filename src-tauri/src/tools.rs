@@ -1,16 +1,32 @@
 //! 자비스가 PC에서 실행할 수 있는 도구들.
 //! 프로그램 실행은 apps.json에 등록된 것만 허용한다 (모델이 임의 명령을 못 돌리게).
+//! 파일은 문서/Jarvis 폴더 안에만 만든다 (다른 곳의 파일을 덮어쓰지 못하게).
 
+use crate::memory::Memory;
 use anyhow::{bail, Context, Result};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 
 pub struct Toolbox {
     apps: BTreeMap<String, String>,
+    files_dir: PathBuf,
+    pub memory: Memory,
+}
+
+/// 문서/Jarvis (윈도우: %USERPROFILE%\Documents\Jarvis, 맥·리눅스: ~/Documents/Jarvis)
+pub fn jarvis_dir() -> PathBuf {
+    let home = std::env::var_os(if cfg!(target_os = "windows") {
+        "USERPROFILE"
+    } else {
+        "HOME"
+    })
+    .map(PathBuf::from)
+    .unwrap_or_else(|| PathBuf::from("."));
+    home.join("Documents").join("Jarvis")
 }
 
 impl Toolbox {
@@ -20,7 +36,12 @@ impl Toolbox {
             .ok()
             .and_then(|s| serde_json::from_str::<BTreeMap<String, String>>(&s).ok())
             .unwrap_or_else(default_apps);
-        Self { apps }
+        let dir = jarvis_dir();
+        Self {
+            apps,
+            memory: Memory::load(dir.join("memory.json")),
+            files_dir: dir,
+        }
     }
 
     pub fn app_names(&self) -> Vec<&str> {
@@ -106,6 +127,43 @@ pub fn schemas(tb: &Toolbox) -> Value {
             }
         },
         {
+            "name": "create_file",
+            "description": "텍스트 파일을 문서/Jarvis 폴더에 만들고 연다. 메모, 할 일 목록, 표(csv), 글 초안 등. filename에 확장자(txt, md, csv, json, html)를 붙이고 content에 전체 내용을 넣는다.",
+            "input_schema": {
+                "type": "object",
+                "properties": { "filename": { "type": "string" }, "content": { "type": "string" } },
+                "required": ["filename", "content"]
+            }
+        },
+        {
+            "name": "remember",
+            "description": "정보를 기록 네트워크에 저장한다. 같은 제목이 있으면 내용을 덧붙인다. tags는 주제 2~4개, related는 이어질 기존 기록 제목.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "title": { "type": "string" },
+                    "content": { "type": "string" },
+                    "tags": { "type": "array", "items": { "type": "string" } },
+                    "related": { "type": "array", "items": { "type": "string" } }
+                },
+                "required": ["title", "content"]
+            }
+        },
+        {
+            "name": "recall",
+            "description": "기록에서 찾는다. query가 비면 최근 기록을 돌려준다.",
+            "input_schema": { "type": "object", "properties": { "query": { "type": "string" } } }
+        },
+        {
+            "name": "show_memory",
+            "description": "기록 네트워크 화면을 열거나 닫는다.",
+            "input_schema": {
+                "type": "object",
+                "properties": { "open": { "type": "boolean" } },
+                "required": ["open"]
+            }
+        },
+        {
             "name": "set_hologram",
             "description": "홀로그램 분위기를 바꾼다. calm(기본 청록), focus(맑은 백청색, 집중), nebula(보라·자홍 성운), alert(호박색 경계).",
             "input_schema": {
@@ -185,8 +243,138 @@ pub async fn run(app: &AppHandle, tb: &Toolbox, name: &str, input: &Value) -> Re
             Ok(format!("홀로그램 {mood}"))
         }
 
+        "create_file" => {
+            let raw = input["filename"].as_str().unwrap_or("jarvis.txt");
+            let content = input["content"].as_str().unwrap_or_default();
+            let path = create_file(&tb.files_dir, raw, content)?;
+            let shown = path.display().to_string();
+            if let Err(e) = open_path(&path) {
+                return Ok(format!("{shown}에 만들었지만 열지는 못했음: {e:#}"));
+            }
+            Ok(format!("{shown}에 만들고 열었음"))
+        }
+
+        "remember" => {
+            let list = |k: &str| -> Vec<String> {
+                input[k]
+                    .as_array()
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|v| v.as_str().map(String::from))
+                            .collect()
+                    })
+                    .unwrap_or_default()
+            };
+            let rec = tb.memory.upsert(
+                input["title"].as_str().unwrap_or_default(),
+                input["content"].as_str().unwrap_or_default(),
+                &list("tags"),
+                &list("related"),
+            )?;
+            let _ = app.emit("memory-changed", json!({ "id": rec.id }));
+            Ok(format!("기록함: {}", rec.title))
+        }
+
+        "recall" => {
+            let found = tb
+                .memory
+                .search(input["query"].as_str().unwrap_or_default(), 8);
+            if found.is_empty() {
+                return Ok("관련 기록 없음".into());
+            }
+            Ok(serde_json::to_string(&found)?)
+        }
+
+        "show_memory" => {
+            let open = input["open"].as_bool().unwrap_or(true);
+            let _ = app.emit("memory-panel", open);
+            Ok(if open {
+                "기록 화면을 열었음"
+            } else {
+                "기록 화면을 닫았음"
+            }
+            .into())
+        }
+
         other => bail!("알 수 없는 도구: {other}"),
     }
+}
+
+// ---------- 파일 만들기 ----------
+
+const FILE_EXTS: [&str; 5] = ["txt", "md", "csv", "json", "html"];
+
+/// 이름에서 폴더 경로·금지 문자를 걷어내고, 같은 이름이 있으면 "이름 (2).txt"처럼 피해서 만든다.
+pub fn create_file(dir: &Path, raw_name: &str, content: &str) -> Result<PathBuf> {
+    let base = Path::new(raw_name)
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("jarvis.txt");
+    let mut name: String = base
+        .chars()
+        .map(|c| {
+            if "\\/:*?\"<>|".contains(c) || c.is_control() {
+                '_'
+            } else {
+                c
+            }
+        })
+        .collect::<String>()
+        .trim()
+        .trim_start_matches('.')
+        .chars()
+        .take(80)
+        .collect();
+    if name.is_empty() {
+        name = "jarvis.txt".into();
+    }
+    let ext_ok = Path::new(&name)
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| FILE_EXTS.contains(&e.to_ascii_lowercase().as_str()))
+        .unwrap_or(false);
+    if !ext_ok {
+        name.push_str(".txt");
+    }
+    std::fs::create_dir_all(dir).context("문서/Jarvis 폴더를 만들지 못했습니다")?;
+    let stem = Path::new(&name)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("jarvis")
+        .to_string();
+    let ext = Path::new(&name)
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("txt")
+        .to_string();
+    let mut path = dir.join(&name);
+    let mut n = 2;
+    while path.exists() {
+        path = dir.join(format!("{stem} ({n}).{ext}"));
+        n += 1;
+    }
+    // 정규화 후에도 폴더 밖이면 거절 (이중 안전장치)
+    if path.parent() != Some(dir) {
+        bail!("문서/Jarvis 폴더 밖에는 파일을 만들 수 없습니다");
+    }
+    std::fs::write(&path, content).context("파일을 쓰지 못했습니다")?;
+    Ok(path)
+}
+
+fn open_path(path: &Path) -> Result<()> {
+    let mut cmd;
+    if cfg!(target_os = "windows") {
+        cmd = Command::new("cmd");
+        cmd.arg("/C").arg("start").arg("").arg(path);
+    } else if cfg!(target_os = "macos") {
+        cmd = Command::new("open");
+        cmd.arg(path);
+    } else {
+        cmd = Command::new("xdg-open");
+        cmd.arg(path);
+    }
+    quiet(cmd).spawn().context("파일을 열지 못했습니다")?;
+    Ok(())
 }
 
 // ---------- 플랫폼별 실행 ----------
@@ -257,4 +445,22 @@ fn set_volume(percent: u32) -> Result<()> {
         bail!("볼륨 변경 명령이 실패했습니다");
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::create_file;
+
+    #[test]
+    fn create_file_stays_inside_folder() {
+        let dir = std::env::temp_dir().join(format!("jarvis-test-{}", std::process::id()));
+        let p = create_file(&dir, "../../evil/할 일.md", "내용").unwrap();
+        assert_eq!(p.parent().unwrap(), dir);
+        assert_eq!(p.file_name().unwrap().to_str().unwrap(), "할 일.md");
+        let p2 = create_file(&dir, "할 일.md", "다시").unwrap();
+        assert_eq!(p2.file_name().unwrap().to_str().unwrap(), "할 일 (2).md");
+        let p3 = create_file(&dir, "run.exe", "x").unwrap();
+        assert_eq!(p3.file_name().unwrap().to_str().unwrap(), "run.exe.txt");
+        std::fs::remove_dir_all(&dir).ok();
+    }
 }

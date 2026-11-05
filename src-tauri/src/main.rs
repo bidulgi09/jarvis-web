@@ -3,6 +3,7 @@
 
 mod audio;
 mod brain;
+mod memory;
 mod stt;
 mod tools;
 
@@ -90,6 +91,24 @@ async fn ask(app: AppHandle, state: State<'_, AppState>, text: String) -> Result
         .map_err(|e| format!("{e:#}"))
 }
 
+/// 기록 네트워크 화면용: 저장된 기록 전체
+#[tauri::command]
+fn list_memories(state: State<'_, AppState>) -> Vec<memory::Record> {
+    state.brain.toolbox().memory.all()
+}
+
+#[tauri::command]
+fn delete_memory(app: AppHandle, state: State<'_, AppState>, id: String) -> Result<(), String> {
+    state
+        .brain
+        .toolbox()
+        .memory
+        .remove(&id)
+        .map_err(|e| format!("{e:#}"))?;
+    let _ = tauri::Emitter::emit(&app, "memory-changed", serde_json::json!({}));
+    Ok(())
+}
+
 #[tauri::command]
 async fn reset(state: State<'_, AppState>) -> Result<(), String> {
     state.brain.reset().await;
@@ -145,7 +164,9 @@ fn main() {
             start_listening,
             stop_listening,
             ask,
-            reset
+            reset,
+            list_memories,
+            delete_memory
         ])
         .run(tauri::generate_context!())
         .expect("자비스를 시작하지 못했습니다");

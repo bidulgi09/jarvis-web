@@ -1,4 +1,5 @@
 //! 두뇌: Groq(무료, 기본) / Gemini / Claude + 도구 사용 루프.
+//! 시스템 프롬프트에 최근 기록 제목을 넣어, 새 기록을 기존 기록과 이어 줄 수 있게 한다.
 //! 대화 기록은 앱이 켜져 있는 동안 메모리에만 둔다.
 
 use crate::tools::{self, Toolbox};
@@ -476,9 +477,18 @@ fn system_prompt(tb: &Toolbox) -> String {
 숫자와 단위는 읽기 쉽게 풀어 쓴다.\n\
 사용자의 말은 음성 인식 결과라 오타가 있을 수 있으니 의도를 추론하되, 애매하면 짧게 되묻는다.\n\
 PC를 다룰 때는 반드시 도구를 쓰고, 도구가 실패하면 이유를 짧게 알린다. 할 수 없는 일은 솔직히 말한다.\n\
+파일을 만들어 달라면 create_file로 문서/Jarvis 폴더에 만든다.\n\
+사용자가 기억·기록·메모해 달라고 하거나 일정·마감·선호처럼 나중에 다시 쓸 정보를 말하면 remember로 기록한다. \
+주제 태그 2~4개를 붙이고, 이미 있는 기록과 관련 있으면 related에 그 제목을 넣어 이어 준다. \
+전에 말한 것이나 기록한 내용을 물으면 먼저 recall로 찾아보고 답한다.\n\
 열 수 있는 앱: {apps}\n\
-현재 시각: {now}",
-        apps = tb.app_names().join(", ")
+현재 시각: {now}\n\
+현재 기록 제목: {titles}",
+        apps = tb.app_names().join(", "),
+        titles = {
+            let t = tb.memory.titles(40);
+            if t.is_empty() { "(없음)".to_string() } else { t.join(", ") }
+        }
     )
 }
 

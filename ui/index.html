@@ -28,7 +28,7 @@ html,body{height:100%;margin:0}
 body{background:var(--void);color:var(--ink);font-family:var(--f-body);font-size:15px;overflow:hidden}
 #sky{position:fixed;inset:0;width:100%;height:100%;display:block}
 
-.hud{position:fixed;inset:0;pointer-events:none;display:grid;grid-template-rows:auto 1fr auto;grid-template-columns:minmax(0,1fr);overflow:hidden;
+.hud{position:fixed;top:0;left:0;right:0;height:var(--vvh,100%);pointer-events:none;display:grid;grid-template-rows:auto 1fr auto;grid-template-columns:minmax(0,1fr);overflow:hidden;
   padding-block:calc(18px + env(safe-area-inset-top,0px)) calc(16px + env(safe-area-inset-bottom,0px));
   padding-left:max(20px, env(safe-area-inset-left,0px));padding-right:max(20px, env(safe-area-inset-right,0px))}
 .hud > *{pointer-events:auto}
@@ -43,7 +43,7 @@ body{background:var(--void);color:var(--ink);font-family:var(--f-body);font-size
 .clock{grid-column:1/-1;font-family:var(--f-display);font-size:22px;letter-spacing:.12em;color:var(--ink);font-variant-numeric:tabular-nums;margin-bottom:6px}
 
 .middle{position:relative;min-height:0}
-.state{position:absolute;left:50%;top:calc(50% + var(--orb-px,120px) + 8vh);transform:translateX(-50%);
+.state{position:fixed;left:0;top:0;transform:translate(calc(50vw - 50%), var(--state-y, 70vh));pointer-events:none;z-index:1;
   font-family:var(--f-mono);font-size:11px;letter-spacing:.5em;color:var(--dim);white-space:nowrap;transition:color .6s var(--ease)}
 .state[data-m="listening"]{color:var(--holo)}
 .state[data-m="thinking"]{color:var(--ink)}
@@ -63,11 +63,12 @@ body{background:var(--void);color:var(--ink);font-family:var(--f-body);font-size
 .log .l.j .w{color:var(--holo)}
 .log .l.tool{font-family:var(--f-mono);font-size:11px;color:var(--warm)}
 
-.bottom{display:flex;flex-direction:column;align-items:center;gap:14px}
-.caption{max-width:min(760px, 100%);text-align:center;min-height:3.2em}
+.bottom{display:flex;flex-direction:column;align-items:center;gap:14px;min-height:0}
+.caption{width:min(760px, 100%);text-align:center;min-height:3.2em;max-height:min(32vh, 260px);overflow-y:auto;overscroll-behavior:contain;
+  scrollbar-width:thin;scrollbar-color:var(--faint) transparent;-webkit-mask-image:linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 12px), transparent 100%);mask-image:linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 12px), transparent 100%);padding-block:10px}
 .heard{font-size:13px;color:var(--dim);margin-bottom:8px;min-height:1.3em}
-.reply{font-size:clamp(17px, 2.2vw, 22px);font-weight:300;line-height:1.55;text-wrap:balance;text-shadow:0 0 24px rgba(4,3,12,.9)}
-.reply .wd{display:inline-block;animation:wordIn .7s var(--ease) both;white-space:pre}
+.reply{overflow-wrap:anywhere;font-size:clamp(16px, 2.2vw, 22px);font-weight:300;line-height:1.55;text-wrap:balance;text-shadow:0 0 24px rgba(4,3,12,.9)}
+.reply .wd{display:inline-block;animation:wordIn .7s var(--ease) both;white-space:pre-wrap;max-width:100%}
 .reply.err{color:var(--warm);font-size:15px}
 
 .bar{display:flex;gap:10px;align-items:center;width:min(720px, 100%)}
@@ -104,6 +105,7 @@ body{background:var(--void);color:var(--ink);font-family:var(--f-body);font-size
 .sheet .note a{color:var(--holo)}
 .sheet{max-height:calc(100vh - 32px);overflow-y:auto}
 .diag{display:flex;gap:8px;flex-wrap:wrap}
+body.app .webOnly, body.app .webOnlyBtn{display:none}
 .diag button{font-family:var(--f-body);font-size:13px;padding:8px 12px;border-radius:10px;border:1px dashed rgba(127,243,255,.4);background:transparent;color:var(--ink);cursor:pointer}
 .diag button:disabled{opacity:.45;cursor:default}
 .diagOut{margin:4px 0 0;padding:10px 12px;border-radius:10px;background:rgba(4,3,12,.7);border:1px solid var(--faint);font-family:var(--f-mono);font-size:12px;line-height:1.6;color:var(--ink);white-space:pre-wrap;overflow-wrap:anywhere;max-height:220px;overflow-y:auto}
@@ -112,6 +114,33 @@ body{background:var(--void);color:var(--ink);font-family:var(--f-body);font-size
 .sheet .acts{display:flex;justify-content:flex-end;gap:10px;margin-top:14px}
 .sheet .acts button{font-family:var(--f-mono);font-size:11px;letter-spacing:.2em;padding:9px 16px;border-radius:20px;border:1px solid var(--faint);background:transparent;color:var(--dim);cursor:pointer}
 .sheet .acts .pri{border-color:rgba(127,243,255,.5);color:var(--holo)}
+.mem{position:fixed;z-index:15;top:calc(64px + env(safe-area-inset-top,0px));bottom:calc(150px + env(safe-area-inset-bottom,0px));
+  left:max(20px, env(safe-area-inset-left,0px));right:max(20px, env(safe-area-inset-right,0px));
+  border:1px solid var(--faint);border-radius:22px;background:rgba(6,6,22,.62);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  display:grid;grid-template-rows:auto 1fr;overflow:hidden;opacity:0;transform:scale(.96) translateY(10px);
+  transition:opacity .45s var(--ease), transform .55s var(--ease);pointer-events:none}
+.mem.open{opacity:1;transform:none;pointer-events:auto}
+.mem[hidden]{display:none}
+.memHead{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--faint);flex-wrap:wrap}
+.memHead b{font-family:var(--f-display);font-size:11px;letter-spacing:.38em;font-weight:700}
+.memHead .cnt{font-family:var(--f-mono);font-size:11px;color:var(--dim)}
+.memHead input{flex:1;min-width:120px;background:rgba(4,3,12,.6);border:1px solid var(--faint);border-radius:16px;color:var(--ink);font:inherit;font-size:14px;padding:7px 12px}
+.memHead input:focus{outline:none;border-color:rgba(127,243,255,.5)}
+.memHead button{font-family:var(--f-mono);font-size:11px;letter-spacing:.2em;background:transparent;border:1px solid var(--faint);border-radius:16px;color:var(--dim);padding:8px 12px;cursor:pointer}
+.memBody{position:relative;min-height:0}
+.memBody canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab}
+.memEmpty{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:24px;color:var(--dim);font-size:14px;line-height:1.7}
+.memEmpty[hidden]{display:none}
+.memCard{position:absolute;right:14px;bottom:14px;width:min(340px, calc(100% - 28px));max-height:calc(100% - 28px);overflow-y:auto;
+  background:rgba(10,10,30,.9);border:1px solid rgba(127,243,255,.3);border-radius:16px;padding:14px 16px;animation:rise .4s var(--ease) both}
+.memCard[hidden]{display:none}
+.memCard h3{margin:0 0 4px;font-size:16px;font-weight:500}
+.memCard .meta{font-family:var(--f-mono);font-size:11px;color:var(--dim);margin-bottom:10px;overflow-wrap:anywhere}
+.memCard p{margin:0;white-space:pre-wrap;font-size:14px;line-height:1.6;overflow-wrap:anywhere}
+.memCard .acts{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
+.memCard .acts button{font-family:var(--f-mono);font-size:11px;letter-spacing:.14em;background:transparent;border:1px solid var(--faint);border-radius:14px;color:var(--dim);padding:7px 12px;cursor:pointer}
+.memCard .acts .danger{border-color:rgba(255,122,107,.6);color:var(--danger)}
+@media (max-width:720px){ .mem{top:calc(10px + env(safe-area-inset-top,0px));bottom:calc(10px + env(safe-area-inset-bottom,0px));left:8px;right:8px} }
 .demo{position:fixed;left:50%;top:calc(14px + env(safe-area-inset-top,0px));transform:translateX(-50%);font-family:var(--f-mono);font-size:10px;letter-spacing:.2em;color:var(--warm);
   border:1px solid rgba(255,207,138,.35);padding:4px 10px;border-radius:12px;background:rgba(20,12,4,.4);pointer-events:none;white-space:nowrap}
 button:focus-visible,input:focus-visible{outline:2px solid var(--holo);outline-offset:3px}
@@ -119,8 +148,21 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--holo);outline-o
 @keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 @keyframes wordIn{from{opacity:0;filter:blur(6px);transform:translateY(4px)}to{opacity:1;filter:blur(0);transform:none}}
 
+@media (hover:none){ .kbdhint{display:none} }
 @media (max-width:720px){
+  .hud{padding-block:calc(12px + env(safe-area-inset-top,0px)) calc(10px + env(safe-area-inset-bottom,0px))}
   .log{display:none}
+  .status{font-size:10px;gap:2px 10px}
+  .status > span, .status > b{display:none}
+  .status > #stBrain{display:block;max-width:44vw;text-align:right;overflow-wrap:anywhere}
+  .state{font-size:10px}
+  .mic{width:58px;height:58px}
+  .field input{font-size:16px;padding:14px 16px}
+  .hint{gap:4px;font-size:10px;letter-spacing:.12em}
+  .hint button{padding:10px 8px;min-height:40px}
+  .caption{max-height:26vh}
+  .cam canvas{width:120px;height:90px}
+  .timers{top:0}
   .status{grid-template-columns:auto}
   .brand{font-size:12px;letter-spacing:.3em;min-width:0}
   .brand small{letter-spacing:.12em}
@@ -139,11 +181,12 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--holo);outline-o
 
 <div class="hud">
   <div class="row">
-    <div class="brand">J.A.R.V.I.S.<small>MK.II · LOCAL WHISPER · CLAUDE</small></div>
+    <div class="brand">J.A.R.V.I.S.<small>MK.III · WHISPER · GROQ · SUPERTONIC</small></div>
     <div class="status" id="status">
       <div class="clock" id="clock">00:00</div>
       <span>두뇌</span><b id="stBrain">확인 중</b>
       <span>음성인식</span><b id="stEar">확인 중</b>
+      <span>목소리</span><b id="stVoice">브라우저</b>
       <span>손 인식</span><b id="stHand">꺼짐</b>
     </div>
   </div>
@@ -173,7 +216,8 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--holo);outline-o
       </div>
     </form>
     <div class="hint">
-      <span><kbd>Space</kbd> 누르고 있는 동안 말하기 · ✋ 펴면 듣기, ✊ 쥐면 보내기</span>
+      <span class="kbdhint"><kbd>Space</kbd> 누르고 있는 동안 말하기 · ✋ 펴면 듣기, ✊ 쥐면 보내기</span>
+      <button type="button" id="memBtn">MEMORY</button>
       <button type="button" id="handBtn">HAND OFF</button>
       <button type="button" id="logBtn">LOG</button>
       <button type="button" id="voiceBtn">VOICE ON</button>
@@ -182,11 +226,33 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--holo);outline-o
     </div>
   </div>
 </div>
+<div class="mem" id="mem" hidden role="dialog" aria-label="기록 네트워크">
+  <div class="memHead">
+    <b>MEMORY</b><span class="cnt" id="memCount"></span>
+    <input id="memSearch" type="search" placeholder="기록 찾기" aria-label="기록 찾기">
+    <button type="button" id="memClose">CLOSE</button>
+  </div>
+  <div class="memBody">
+    <canvas id="memCanvas" aria-label="기록과 주제가 이어진 네트워크"></canvas>
+    <div class="memEmpty" id="memEmpty">아직 기록이 없습니다.<br>"자비스, 수행평가 마감은 금요일이라고 기록해줘"처럼 말해 보세요.</div>
+    <div class="memCard" id="memCard" hidden>
+      <h3 id="mcTitle"></h3>
+      <div class="meta" id="mcMeta"></div>
+      <p id="mcBody"></p>
+      <div class="acts">
+        <button type="button" id="mcClose">닫기</button>
+        <button type="button" id="mcDel">삭제</button>
+        <button type="button" id="mcDelYes" class="danger" hidden>정말 삭제</button>
+      </div>
+    </div>
+  </div>
+</div>
 <div class="demo" id="demo" hidden>DEMO · SETTINGS에 무료 Groq 키를 넣으면 실제로 대화합니다</div>
 
 <div class="settings" id="settings" hidden role="dialog" aria-modal="true" aria-labelledby="cfgTitle">
   <form class="sheet" id="cfgForm" autocomplete="off">
     <h2 id="cfgTitle">SETTINGS</h2>
+    <div class="webOnly">
     <label for="cfgModel">두뇌 모델</label>
     <select id="cfgModel">
       <optgroup label="무료 (Groq) · 추천">
@@ -233,10 +299,23 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--holo);outline-o
       </optgroup>
     </select>
     <p class="note" id="whisperNote"></p>
+    </div>
+    <label for="cfgTts">목소리</label>
+    <select id="cfgTts">
+      <optgroup label="Supertonic (무료 · 자연스러움 · 기기 안에서 생성)">
+        <option value="M1">남성 1 · 자비스 기본</option><option value="M2">남성 2</option><option value="M3">남성 3</option><option value="M4">남성 4</option><option value="M5">남성 5</option>
+        <option value="F1">여성 1</option><option value="F2">여성 2</option><option value="F3">여성 3</option><option value="F4">여성 4</option><option value="F5">여성 5</option>
+      </optgroup>
+      <optgroup label="가볍게">
+        <option value="browser">브라우저 기본 음성 · 다운로드 없음</option>
+      </optgroup>
+    </select>
+    <p class="note">Supertonic은 처음 한 번 음성 모델을 받아 저장해 두고, 이후에는 인터넷 없이도 기기 안에서 목소리를 만듭니다. 받는 동안에는 브라우저 기본 음성으로 말합니다.</p>
     <label>진단</label>
     <div class="diag">
-      <button type="button" id="testBrainBtn">두뇌 연결 테스트</button>
-      <button type="button" id="testMicBtn">마이크 3초 받아쓰기</button>
+      <button type="button" id="testBrainBtn" class="webOnlyBtn">두뇌 연결 테스트</button>
+      <button type="button" id="testMicBtn" class="webOnlyBtn">마이크 3초 받아쓰기</button>
+      <button type="button" id="testVoiceBtn">목소리 듣기</button>
     </div>
     <pre class="diagOut" id="diagOut" hidden></pre>
     <div class="acts">
@@ -251,6 +330,12 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--holo);outline-o
 "use strict";
 const $ = (id) => document.getElementById(id);
 const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+// 모바일에서 키보드가 올라오면 보이는 영역만큼만 HUD를 써서 입력창이 가려지지 않게
+(function fitViewport(){
+  const vv = window.visualViewport;
+  const set = () => document.documentElement.style.setProperty("--vvh", (vv ? vv.height : innerHeight) + "px");
+  set(); (vv || window).addEventListener("resize", set); vv?.addEventListener("scroll", () => window.scrollTo(0, 0));
+})();
 
 // ======================================================================
 //  브리지: 데스크톱(Tauri)이면 Rust 백엔드, 아니면 브라우저 데모
@@ -285,7 +370,9 @@ const BRAINS = {
   "claude-haiku-5-5":      { provider: "claude", label: "Claude Haiku 5.5" },
   "claude-sonnet-5-5":     { provider: "claude", label: "Claude Sonnet 5.5" },
 };
-const cfg = Object.assign({ brain: "groq:openai/gpt-oss-120b", groqKey: "", geminiKey: "", apiKey: "", whisper: "base" },
+// 목소리 기본값: 데스크톱 브라우저(정밀한 포인터 + WebGPU)는 Supertonic, 휴대폰은 데이터 절약을 위해 브라우저 음성
+const DEFAULT_TTS = (matchMedia("(pointer: fine)").matches && !!navigator.gpu) ? "M1" : "browser";
+const cfg = Object.assign({ brain: "groq:openai/gpt-oss-120b", groqKey: "", geminiKey: "", apiKey: "", whisper: "base", tts: DEFAULT_TTS },
   (() => { try { return JSON.parse(localStorage.getItem(CFG_KEY) || "{}"); } catch { return {}; } })());
 if (!BRAINS[cfg.brain]) cfg.brain = "groq:openai/gpt-oss-120b";
 // 예전 설정(Gemini 기본)에서 키가 없었다면 새 기본값인 Groq로 옮긴다
@@ -298,14 +385,65 @@ const activeKey = () => keyFor(provider());
 const TRANSFORMERS_URL = "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.2";
 let pendingLinks = [];
 
+// ======================================================================
+//  기록 (웹 버전은 이 브라우저에, 데스크톱 앱은 Rust가 문서/Jarvis/memory.json에 저장)
+// ======================================================================
+const MEM_KEY = "jarvis.memory";
+const normTitle = (t) => String(t || "").trim().toLowerCase().replace(/\s+/g, " ");
+const localMem = {
+  all(){ try { const a = JSON.parse(localStorage.getItem(MEM_KEY) || "[]"); return Array.isArray(a) ? a : []; } catch { return []; } },
+  save(a){ try { localStorage.setItem(MEM_KEY, JSON.stringify(a)); } catch { throw new Error("이 브라우저에 기록을 저장할 수 없습니다 (저장 공간이 꺼져 있거나 가득 참)."); } },
+  upsert({ title, content, tags, related }){
+    title = String(title || "").trim().slice(0, 60);
+    content = String(content || "").trim().slice(0, 4000);
+    if (!title || !content) throw new Error("title과 content가 필요합니다");
+    const clean = (xs) => [...new Set((Array.isArray(xs) ? xs : []).map(x => String(x).trim()).filter(Boolean))].slice(0, 8);
+    const all = this.all(), now = Date.now();
+    let rec = all.find(r => normTitle(r.title) === normTitle(title));
+    if (rec){
+      if (!rec.content.includes(content)) rec.content = (rec.content + "\n" + content).slice(-4000);
+      rec.tags = clean([...(rec.tags || []), ...clean(tags)]);
+      rec.related = clean([...(rec.related || []), ...clean(related)]);
+      rec.updated = now;
+    } else {
+      rec = { id: "m" + now.toString(36) + Math.random().toString(36).slice(2, 6), title, content, tags: clean(tags), related: clean(related), created: now, updated: now };
+      all.push(rec);
+    }
+    this.save(all);
+    return rec;
+  },
+  remove(id){ this.save(this.all().filter(r => r.id !== id)); },
+  search(q, n = 8){
+    const all = this.all();
+    const words = String(q || "").toLowerCase().split(/\s+/).filter(Boolean);
+    if (!words.length) return all.sort((a, b) => b.updated - a.updated).slice(0, n);
+    return all.map(r => {
+      const hay = (r.title + " " + r.content + " " + (r.tags || []).join(" ")).toLowerCase();
+      const score = words.reduce((s, w) => s + (hay.includes(w) ? (r.title.toLowerCase().includes(w) ? 3 : 1) : 0), 0);
+      return { r, score };
+    }).filter(x => x.score > 0).sort((a, b) => b.score - a.score || b.r.updated - a.r.updated).slice(0, n).map(x => x.r);
+  },
+};
+const memSummary = (r) => ({ title: r.title, content: r.content, tags: r.tags, related: r.related, updated: new Date(r.updated).toLocaleString("ko-KR") });
+
 function webSystemPrompt(){
+  const titles = localMem.all().sort((a, b) => b.updated - a.updated).slice(0, 40).map(r => r.title);
   return `너는 토니 스타크의 AI 비서 J.A.R.V.I.S.다. 사용자를 '주인님'이라 부르고, 침착하고 정중하며 살짝 위트 있는 영국 집사 같은 말투의 한국어로 답한다.
 답변은 음성으로 읽히므로 보통 1~3문장으로 짧게, 마크다운·이모지·목록 기호 없이 말하듯 쓴다.
 사용자의 말은 음성 인식 결과라 오타가 있을 수 있으니 의도를 추론한다.
-타이머, 홀로그램 분위기, 링크 열기, 시각 확인은 반드시 도구를 호출해서 처리한다.
+타이머, 홀로그램 분위기, 링크 열기, 파일 만들기, 시각 확인은 반드시 도구를 호출해서 처리한다.
+사용자가 기억·기록·메모해 달라고 하거나 일정·마감·선호처럼 나중에 다시 쓸 정보를 말하면 remember로 기록한다. 주제 태그 2~4개를 붙이고, 이미 있는 기록과 관련 있으면 related에 그 제목을 넣어 이어 준다.
+사용자가 전에 말한 것이나 기록한 내용을 물으면 먼저 recall로 찾아보고 답한다.
 지금은 웹 브라우저에서 동작 중이라 PC 프로그램 실행과 볼륨 조절은 할 수 없다. 요청받으면 데스크톱 앱에서 가능하다고 짧게 안내한다.
-현재 시각: ${new Date().toLocaleString("ko-KR")}`;
+현재 시각: ${new Date().toLocaleString("ko-KR")}
+현재 기록 제목: ${titles.length ? titles.join(", ") : "(없음)"}`;
 }
+
+// 새 탭 열기는 사용자가 방금 누르거나 말을 끝낸 직후(약 5초 안)에만 브라우저가 허용한다
+let lastGestureAt = -1e9;
+for (const ev of ["pointerup", "keyup", "touchend"]) addEventListener(ev, () => { lastGestureAt = performance.now(); }, true);
+
+const FILE_TYPES = { txt: "text/plain", md: "text/markdown", csv: "text/csv", json: "application/json", html: "text/html" };
 
 const WEB_TOOLS = [
   { name: "get_datetime", description: "현재 날짜, 요일, 시각을 돌려준다.",
@@ -324,14 +462,45 @@ const WEB_TOOLS = [
   { name: "set_hologram", description: "홀로그램 분위기를 바꾼다. calm(기본 청록), focus(맑은 백청색), nebula(보라·자홍 성운), alert(호박색 경계).",
     input_schema: { type: "object", properties: { mood: { type: "string", enum: ["calm", "focus", "nebula", "alert"] } }, required: ["mood"] },
     run: (i) => { const m = String(i.mood); if (!["calm","focus","nebula","alert"].includes(m)) throw new Error("알 수 없는 분위기"); fire("hologram", m); return "홀로그램 " + m; } },
-  { name: "open_url", description: "https 주소를 화면에 링크로 띄운다. 검색은 검색 결과 페이지 URL을 만들어 넘긴다.",
+  { name: "open_url", description: "https 주소를 새 탭으로 연다. 검색은 검색 결과 페이지 URL(예: https://www.google.com/search?q=..., https://www.youtube.com/results?search_query=...)을 만들어 넘긴다.",
     input_schema: { type: "object", properties: { url: { type: "string" }, title: { type: "string" } }, required: ["url"] },
     run: (i) => {
-      const url = String(i.url || "");
+      const url = String(i.url || ""), title = String(i.title || url).slice(0, 60);
       if (!/^https:\/\/[^\s"]+$/.test(url)) throw new Error("https로 시작하는 올바른 주소만 열 수 있습니다");
-      pendingLinks.push({ url, title: String(i.title || url).slice(0, 60) });
-      return "링크를 화면에 띄웠음";
+      let w = null;
+      if (performance.now() - lastGestureAt < 4800){
+        try { w = window.open(url, "_blank"); if (w) w.opener = null; } catch {}
+      }
+      if (w) return "새 탭으로 열었음";
+      pendingLinks.push({ url, title });
+      return "브라우저가 자동으로 여는 것을 막아서 화면에 링크로 띄웠음 (사용자에게 눌러 달라고 안내할 것)";
     } },
+  { name: "create_file", description: "텍스트 파일을 만들어 사용자의 다운로드 폴더에 저장한다. 메모, 할 일 목록, 표(csv), 글 초안 등. filename에는 확장자(txt, md, csv, json, html)를 붙인다. content는 파일에 들어갈 전체 내용.",
+    input_schema: { type: "object", properties: { filename: { type: "string" }, content: { type: "string" } }, required: ["filename", "content"] },
+    run: (i) => {
+      let name = String(i.filename || "jarvis.txt").replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_").replace(/^\.+/, "").trim().slice(0, 80) || "jarvis.txt";
+      let ext = (name.match(/\.([a-z0-9]+)$/i) || [])[1]?.toLowerCase();
+      if (!FILE_TYPES[ext]){ name += ".txt"; ext = "txt"; }
+      const blob = new Blob([String(i.content ?? "")], { type: FILE_TYPES[ext] + ";charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a"); a.href = url; a.download = name; a.hidden = true;
+      document.body.append(a); a.click(); a.remove();
+      pendingLinks.push({ url, title: "파일 다시 받기: " + name, download: name });
+      return `${name} 파일(${blob.size}바이트)을 만들어 다운로드 폴더에 저장했음`;
+    } },
+  { name: "remember", description: "정보를 기록 네트워크에 저장한다. 같은 제목이 있으면 내용을 덧붙인다. tags는 주제 2~4개, related는 이어질 기존 기록 제목.",
+    input_schema: { type: "object", properties: {
+      title: { type: "string", description: "짧은 제목 (예: 영어 수행평가 마감)" },
+      content: { type: "string", description: "기록할 내용" },
+      tags: { type: "array", items: { type: "string" } },
+      related: { type: "array", items: { type: "string" } } }, required: ["title", "content"] },
+    run: (i) => { const r = localMem.upsert(i); fire("memory-changed", { id: r.id }); return `기록함: ${r.title}`; } },
+  { name: "recall", description: "기록에서 찾는다. query가 비면 최근 기록을 돌려준다.",
+    input_schema: { type: "object", properties: { query: { type: "string" } } },
+    run: (i) => { const rs = localMem.search(i.query); return rs.length ? JSON.stringify(rs.map(memSummary)) : "관련 기록 없음"; } },
+  { name: "show_memory", description: "기록 네트워크 화면을 열거나 닫는다.",
+    input_schema: { type: "object", properties: { open: { type: "boolean" } }, required: ["open"] },
+    run: (i) => { fire("memory-panel", !!i.open); return i.open ? "기록 화면을 열었음" : "기록 화면을 닫았음"; } },
 ];
 function runWebTool(name, input){
   const t = WEB_TOOLS.find(x => x.name === name);
@@ -863,7 +1032,10 @@ function logLine(kind, who, text){
 }
 
 // ======================================================================
-//  음성 출력 (웹뷰 TTS)
+//  음성 출력
+//   - Supertonic 3 (Supertone, 오픈 가중치): 기기 안에서 ONNX Runtime으로 목소리를 만든다. 무료·오프라인.
+//     모델 파일은 처음 한 번 받아 Cache Storage에 저장한다.
+//   - 브라우저 기본 음성(speechSynthesis): 가볍고, Supertonic을 받는 동안의 대체 수단.
 // ======================================================================
 const synth = window.speechSynthesis;
 let voice = null;
@@ -873,23 +1045,233 @@ function pickVoice(){
   voice = vs.find(v => /Injoon|InJoon|Hyunsu|male|남/i.test(v.name)) || vs.find(v => /Natural|Online/i.test(v.name)) || vs[0] || null;
 }
 if (synth){ pickVoice(); synth.addEventListener?.("voiceschanged", pickVoice); }
-function speak(text){
-  if (!synth || !voiceOn || !text){ setMode("idle"); return; }
-  synth.cancel();
+
+function setVoiceStatus(text, bad = false){ const e = $("stVoice"); if (!e) return; e.textContent = text; e.classList.toggle("bad", bad); }
+
+const ST_REV = "aafc6e32416a594460b32413efc49d7fe4ce6d46";   // Supertonic 3 공개 스냅샷 고정
+const ST_BASE = `https://huggingface.co/supertone-oss-archive/supertonic-3/resolve/${ST_REV}`;
+const ORT_URLS = [
+  "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/ort.webgpu.min.mjs",
+  "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/ort.min.mjs",
+  "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.webgpu.min.mjs",
+];
+const TTS_CACHE = "jarvis-tts-v1";
+let stPromise = null, stReady = null;
+const stStyles = {};
+
+async function loadOrt(){
+  let last;
+  for (const u of ORT_URLS){
+    try {
+      const m = await import(u);
+      const ort = m.InferenceSession ? m : m.default;
+      if (!ort?.InferenceSession) throw new Error("InferenceSession 없음");
+      ort.env.wasm.wasmPaths = u.slice(0, u.lastIndexOf("/") + 1);
+      return ort;
+    } catch (e) { last = e; console.warn("[jarvis] ORT 불러오기 실패", u, e); }
+  }
+  throw new Error("ONNX Runtime을 불러오지 못했습니다: " + (last?.message || last));
+}
+
+// 진행률을 보고하며 받고, 받은 것은 Cache Storage에 넣어 다음부터는 바로 쓴다
+async function fetchCached(url, onProgress){
+  let cache = null;
+  try { cache = await caches.open(TTS_CACHE); const hit = await cache.match(url); if (hit){ onProgress?.(1, 1); return await hit.arrayBuffer(); } } catch {}
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`${url.split("/").pop()} 받기 실패 (${r.status})`);
+  const total = +r.headers.get("content-length") || 0;
+  let buf;
+  if (r.body && total){
+    const reader = r.body.getReader(), parts = []; let got = 0;
+    for (;;){ const { done, value } = await reader.read(); if (done) break; parts.push(value); got += value.length; onProgress?.(got, total); }
+    buf = new Uint8Array(got); let o = 0; for (const p of parts){ buf.set(p, o); o += p.length; }
+    buf = buf.buffer;
+  } else { buf = await r.arrayBuffer(); onProgress?.(1, 1); }
+  try { await cache?.put(url, new Response(buf.slice(0), { headers: { "content-type": "application/octet-stream" } })); } catch {}
+  return buf;
+}
+
+function ensureSupertonic(){
+  return stPromise ||= (async () => {
+    setVoiceStatus("Supertonic 준비 중");
+    const ort = await loadOrt();
+    const [cfgs, indexer] = await Promise.all([
+      fetchCached(`${ST_BASE}/onnx/tts.json`).then(b => JSON.parse(new TextDecoder().decode(b))),
+      fetchCached(`${ST_BASE}/onnx/unicode_indexer.json`).then(b => JSON.parse(new TextDecoder().decode(b))),
+    ]);
+    const names = ["duration_predictor", "text_encoder", "vector_estimator", "vocoder"];
+    const got = {}, tot = {};
+    const bufs = await Promise.all(names.map(n => fetchCached(`${ST_BASE}/onnx/${n}.onnx`, (l, t) => {
+      got[n] = l; tot[n] = t;
+      const L = Object.values(got).reduce((a, b) => a + b, 0), Tt = Object.values(tot).reduce((a, b) => a + b, 0);
+      if (Tt > 4) setVoiceStatus(`목소리 받는 중 ${Math.round(L / Tt * 100)}%`);
+    })));
+    setVoiceStatus("목소리 준비 중");
+    const gpu = !!navigator.gpu && await navigator.gpu.requestAdapter().then(a => !!a).catch(() => false);
+    const make = (ep) => Promise.all(bufs.map(b => ort.InferenceSession.create(new Uint8Array(b), { executionProviders: [ep], graphOptimizationLevel: "all" })));
+    let sessions = null, device = "CPU";
+    if (gpu){ try { sessions = await make("webgpu"); device = "GPU"; } catch (e) { console.warn("[jarvis] Supertonic WebGPU 실패, CPU로", e); } }
+    if (!sessions) sessions = await make("wasm");
+    const [dp, te, ve, voc] = sessions;
+    return { ort, cfgs, indexer, dp, te, ve, voc, device };
+  })().then(st => { stReady = st; setVoiceStatus(`Supertonic ${cfg.tts} · ${st.device}`); return st; })
+     .catch(e => { stPromise = null; setVoiceStatus("Supertonic 실패", true); throw e; });
+}
+
+async function loadStyle(st, name){
+  if (stStyles[name]) return stStyles[name];
+  const j = JSON.parse(new TextDecoder().decode(await fetchCached(`${ST_BASE}/voice_styles/${name}.json`)));
+  const t = (o) => new st.ort.Tensor("float32", Float32Array.from(o.data.flat(Infinity)), o.dims);
+  return (stStyles[name] = { ttl: t(j.style_ttl), dp: t(j.style_dp) });
+}
+
+// 공식 예제(helper.js, MIT)의 전처리를 그대로 옮김
+const ST_LANGS = ["en","ko","ja","ar","bg","cs","da","de","el","es","et","fi","fr","hi","hr","hu","id","it","lt","lv","nl","pl","pt","ro","ru","sk","sl","sv","tr","uk","vi","na"];
+function stPreprocess(text, lang){
+  text = text.normalize("NFKD");
+  text = text.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F700}-\u{1F77F}\u{1F780}-\u{1F7FF}\u{1F800}-\u{1F8FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F1E6}-\u{1F1FF}]+/gu, "");
+  const rep = { "–": "-", "‑": "-", "—": "-", "_": " ", "“": '"', "”": '"', "‘": "'", "’": "'", "´": "'", "`": "'",
+    "[": " ", "]": " ", "|": " ", "/": " ", "#": " ", "→": " ", "←": " " };
+  for (const [k, v] of Object.entries(rep)) text = text.replaceAll(k, v);
+  text = text.replace(/[♥☆♡©\\]/g, "");
+  for (const [k, v] of Object.entries({ "@": " at ", "e.g.,": "for example, ", "i.e.,": "that is, " })) text = text.replaceAll(k, v);
+  text = text.replace(/ ,/g, ",").replace(/ \./g, ".").replace(/ !/g, "!").replace(/ \?/g, "?").replace(/ ;/g, ";").replace(/ :/g, ":").replace(/ '/g, "'");
+  while (text.includes('""')) text = text.replace('""', '"');
+  while (text.includes("''")) text = text.replace("''", "'");
+  text = text.replace(/\s+/g, " ").trim();
+  if (!/[.!?;:,'"')\]}…。」』】〉》›»]$/.test(text)) text += ".";
+  if (!ST_LANGS.includes(lang)) lang = "en";
+  return `<${lang}>${text}</${lang}>`;
+}
+function stChunks(text, maxLen){
+  const out = [];
+  for (const para of text.trim().split(/\n\s*\n+/).map(p => p.trim()).filter(Boolean)){
+    let cur = "";
+    for (const sent of para.split(/(?<=[.!?。])\s+/)){
+      if (cur && cur.length + sent.length + 1 > maxLen){ out.push(cur); cur = sent; }
+      else cur += (cur ? " " : "") + sent;
+      while (cur.length > maxLen * 1.6){ out.push(cur.slice(0, maxLen)); cur = cur.slice(maxLen); }
+    }
+    if (cur) out.push(cur);
+  }
+  return out;
+}
+
+// 한 덩어리 문장 → 파형 (Float32Array). 공식 예제의 _infer를 타입 배열로 옮긴 것
+async function stInfer(st, style, text, lang, steps, speed){
+  const { ort, cfgs, indexer } = st;
+  const p = stPreprocess(text, lang);
+  const ids = new BigInt64Array(p.length);
+  for (let j = 0; j < p.length; j++){ const c = p.codePointAt(j); ids[j] = BigInt(c < indexer.length ? indexer[c] : -1); }
+  const textIds = new ort.Tensor("int64", ids, [1, p.length]);
+  const textMask = new ort.Tensor("float32", new Float32Array(p.length).fill(1), [1, 1, p.length]);
+
+  const dpOut = await st.dp.run({ text_ids: textIds, style_dp: style.dp, text_mask: textMask });
+  const dur = Number(dpOut.duration.data[0]) / speed;
+  const { text_emb } = await st.te.run({ text_ids: textIds, style_ttl: style.ttl, text_mask: textMask });
+
+  const sr = cfgs.ae.sample_rate, chunk = cfgs.ae.base_chunk_size * cfgs.ttl.chunk_compress_factor;
+  const dim = cfgs.ttl.latent_dim * cfgs.ttl.chunk_compress_factor;
+  const wavLen = Math.floor(dur * sr), len = Math.max(1, Math.floor((wavLen + chunk - 1) / chunk));
+  let xt = new Float32Array(dim * len);
+  for (let i = 0; i < xt.length; i++){
+    const u1 = Math.max(1e-4, Math.random()), u2 = Math.random();
+    xt[i] = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+  }
+  const latentMask = new ort.Tensor("float32", new Float32Array(len).fill(1), [1, 1, len]);
+  const total = new ort.Tensor("float32", new Float32Array([steps]), [1]);
+  for (let s = 0; s < steps; s++){
+    const out = await st.ve.run({
+      noisy_latent: new ort.Tensor("float32", xt, [1, dim, len]), text_emb, style_ttl: style.ttl,
+      latent_mask: latentMask, text_mask: textMask,
+      current_step: new ort.Tensor("float32", new Float32Array([s]), [1]), total_step: total,
+    });
+    xt = Float32Array.from(out.denoised_latent.data);
+  }
+  const { wav_tts } = await st.voc.run({ latent: new ort.Tensor("float32", xt, [1, dim, len]) });
+  const wav = Float32Array.from(wav_tts.data);
+  return wavLen > 0 && wavLen < wav.length ? wav.subarray(0, wavLen) : wav;
+}
+
+let ttsCtx = null, ttsOut = null, ttsAnalyser = null, ttsGen = 0, ttsSources = [], ttsEndTimer = 0;
+const ttsBuf = new Float32Array(512);
+function ttsLevel(){
+  if (!ttsAnalyser || mode !== "speaking") return 0;
+  ttsAnalyser.getFloatTimeDomainData(ttsBuf);
+  let s = 0; for (let i = 0; i < ttsBuf.length; i++) s += ttsBuf[i] * ttsBuf[i];
+  return Math.sqrt(s / ttsBuf.length);
+}
+
+async function supertonicSpeak(text, gen){
+  const st = stReady;
+  const style = await loadStyle(st, cfg.tts);
+  ttsCtx ||= new (window.AudioContext || window.webkitAudioContext)();
+  if (!ttsOut){
+    ttsOut = ttsCtx.createGain(); ttsAnalyser = ttsCtx.createAnalyser(); ttsAnalyser.fftSize = 512;
+    ttsOut.connect(ttsAnalyser); ttsAnalyser.connect(ttsCtx.destination);
+  }
+  await ttsCtx.resume();
+  const lang = /[가-힣]/.test(text) ? "ko" : "en";
+  const steps = st.device === "GPU" ? 8 : 5;
+  let t = 0, first = true;
+  // 문장 덩어리마다 만들자마자 이어 붙여 재생 → 첫 마디가 빨리 나온다
+  for (const c of stChunks(text, lang === "ko" ? 120 : 300)){
+    if (gen !== ttsGen) return;
+    const wav = await stInfer(st, style, c, lang, steps, 1.05);
+    if (gen !== ttsGen) return;
+    const buf = ttsCtx.createBuffer(1, wav.length, st.cfgs.ae.sample_rate);
+    buf.copyToChannel(wav, 0);
+    const src = ttsCtx.createBufferSource(); src.buffer = buf; src.connect(ttsOut);
+    t = Math.max(t, ttsCtx.currentTime + 0.03);
+    src.start(t); ttsSources.push(src);
+    t += buf.duration + 0.22;
+    if (first){ first = false; setMode("speaking"); }
+    clearTimeout(ttsEndTimer);
+    ttsEndTimer = setTimeout(() => { if (gen === ttsGen && mode === "speaking") setMode("idle"); }, (t - ttsCtx.currentTime) * 1000);
+  }
+}
+
+function browserSpeak(text, gen){
+  if (!synth){ setMode("idle"); return; }
   const u = new SpeechSynthesisUtterance(text);
   u.lang = "ko-KR"; if (voice) u.voice = voice; u.rate = 1.02; u.pitch = 0.92;
-  u.onstart = () => setMode("speaking");
+  u.onstart = () => { if (gen === ttsGen) setMode("speaking"); };
   u.onboundary = () => { speakKick = 1; };
-  u.onend = u.onerror = () => { if (mode === "speaking") setMode("idle"); };
-  setMode("speaking");
+  u.onend = u.onerror = () => { if (gen === ttsGen && mode === "speaking") setMode("idle"); };
   synth.speak(u);
 }
+
+function stopSpeaking(){
+  ttsGen++;
+  clearTimeout(ttsEndTimer);
+  for (const s of ttsSources){ try { s.stop(); } catch {} }
+  ttsSources = [];
+  synth?.cancel();
+}
+
+function speak(text){
+  stopSpeaking();
+  const gen = ttsGen;
+  const clean = String(text || "").replace(/https?:\/\/\S+/g, "").replace(/[*_#`>~]/g, "").trim();
+  if (!voiceOn || !clean){ setMode("idle"); return; }
+  if (cfg.tts !== "browser"){
+    if (stReady){
+      supertonicSpeak(clean, gen).catch(e => { console.warn("[jarvis] Supertonic 재생 실패", e); if (gen === ttsGen) browserSpeak(clean, gen); });
+      return;
+    }
+    ensureSupertonic().catch(e => console.warn("[jarvis] Supertonic 준비 실패", e));   // 받는 동안은 브라우저 음성으로
+  }
+  browserSpeak(clean, gen);
+}
+if (cfg.tts !== "browser") setTimeout(() => ensureSupertonic().catch(() => {}), 1500);   // 첫 대답 전에 미리 받아두기
+else setVoiceStatus("브라우저");
+
 function syncVoiceBtn(){ $("voiceBtn").textContent = voiceOn ? "VOICE ON" : "VOICE OFF"; }
 syncVoiceBtn();
 $("voiceBtn").onclick = () => {
   voiceOn = !voiceOn; syncVoiceBtn();
   try { localStorage.setItem("jarvis.voice", voiceOn ? "on" : "off"); } catch {}
-  if (!voiceOn){ synth?.cancel(); if (mode === "speaking") setMode("idle"); }
+  if (!voiceOn){ stopSpeaking(); if (mode === "speaking") setMode("idle"); }
 };
 
 // ======================================================================
@@ -900,7 +1282,7 @@ async function ask(text){
   text = (text || "").trim();
   if (!text || busy) return;
   busy = true; $("send").disabled = true;
-  synth?.cancel();
+  stopSpeaking();
   $("heard").textContent = "“" + text + "”";
   logLine("u", "YOU", text);
   setMode("thinking");
@@ -909,9 +1291,12 @@ async function ask(text){
     const reply = await api.ask(text);
     showReply(reply); logLine("j", "J.A.R.V.I.S.", reply);
     for (const l of pendingLinks){
-      const a = document.createElement("a"); a.className = "lnk"; a.href = l.url; a.target = "_blank"; a.rel = "noopener";
-      a.textContent = "↗ " + l.title; $("reply").append(document.createElement("br"), a);
+      const a = document.createElement("a"); a.className = "lnk"; a.href = l.url;
+      if (l.download){ a.download = l.download; a.textContent = "⤓ " + l.title; }
+      else { a.target = "_blank"; a.rel = "noopener"; a.textContent = "↗ " + l.title; }
+      $("reply").append(document.createElement("br"), a);
     }
+    document.querySelector(".caption").scrollTop = 0;
     speak(reply);
   }catch(e){
     showReply(String(e), true); logLine("tool", "", "오류: " + e); setMode("idle");
@@ -927,7 +1312,7 @@ $("form").addEventListener("submit", (e) => { e.preventDefault(); const b = $("b
 let holding = false, holdSource = null;   // 누가 듣기를 시작했나: key | pointer | hand
 async function pttDown(src = "key"){
   if (holding || busy) return;
-  holding = true; holdSource = src; synth?.cancel();
+  holding = true; holdSource = src; stopSpeaking();
   $("mic").setAttribute("aria-pressed","true");
   setMode("listening"); $("heard").textContent = "듣고 있습니다…";
   try{ await api.startListening(); }
@@ -1115,7 +1500,7 @@ try { if (localStorage.getItem("jarvis.hand") === "on") startHand(); } catch {}
 on("mic-level", (v) => { micLevel = Math.max(0, Math.min(1, +v || 0)); });
 on("hologram", (m) => { if (PALETTES[m]) mood = m; });
 on("tool", (p) => logLine("tool", "", "▸ " + (String(p?.name).startsWith("fallback:") ? "바쁜 모델 대신 " + p.name.slice(9) + " 사용" : (TOOL_NAMES[p?.name] || p?.name))));
-const TOOL_NAMES = { get_datetime:"시각 확인", open_app:"프로그램 실행", open_url:"브라우저 열기", set_volume:"볼륨 조절", set_timer:"타이머 설정", set_hologram:"홀로그램 전환" };
+const TOOL_NAMES = { get_datetime:"시각 확인", open_app:"프로그램 실행", open_url:"브라우저 열기", set_volume:"볼륨 조절", set_timer:"타이머 설정", set_hologram:"홀로그램 전환", create_file:"파일 만들기", remember:"기록하기", recall:"기록 찾기", show_memory:"기록 화면" };
 
 const timers = new Map();
 on("timer-set", ({id, label, seconds}) => {
@@ -1145,7 +1530,232 @@ function chime(){
 }
 
 $("logBtn").onclick = () => { const l = $("log"); l.hidden = !l.hidden; };
-$("resetBtn").onclick = async () => { synth?.cancel(); await api.reset().catch(()=>{}); $("log").textContent = ""; $("heard").textContent = ""; showReply("대화 기록을 비웠습니다, 주인님."); setMode("idle"); };
+$("resetBtn").onclick = async () => { stopSpeaking(); await api.reset().catch(()=>{}); $("log").textContent = ""; $("heard").textContent = ""; showReply("대화 기록을 비웠습니다, 주인님."); setMode("idle"); };
+
+// ======================================================================
+//  기록 네트워크 (별자리처럼: 기록 = 밝은 별, 주제 태그 = 작은 별, 선 = 연결)
+// ======================================================================
+const memStore = isApp ? {
+  list: () => T.core.invoke("list_memories"),
+  remove: (id) => T.core.invoke("delete_memory", { id }),
+} : {
+  list: async () => localMem.all(),
+  remove: async (id) => { localMem.remove(id); },
+};
+
+const memEl = $("mem"), memCv = $("memCanvas"), memCx = memCv.getContext("2d");
+const G = { scale: 1, nodes: new Map(), edges: [], open: false, sel: null, hover: null, flash: null, drag: null, query: "", raf: 0, w: 0, h: 0, dpr: 1 };
+
+async function memRefresh(newId){
+  let recs = [];
+  try { recs = await memStore.list(); } catch (e) { console.warn("[jarvis] 기록 불러오기 실패", e); }
+  const keep = new Set();
+  const byTitle = new Map(recs.map(r => [normTitle(r.title), r]));
+  const spawn = (id, kind, label, data) => {
+    keep.add(id);
+    let n = G.nodes.get(id);
+    if (!n){
+      const a = Math.random() * Math.PI * 2, d = 40 + Math.random() * 60;
+      n = { id, kind, x: Math.cos(a) * d, y: Math.sin(a) * d, vx: 0, vy: 0, born: performance.now() };
+      G.nodes.set(id, n);
+    }
+    n.label = label; n.data = data;
+    return n;
+  };
+  G.edges = [];
+  for (const r of recs){
+    spawn("r:" + r.id, "rec", r.title, r);
+    for (const t of r.tags || []){ spawn("t:" + t.toLowerCase(), "tag", "#" + t); G.edges.push(["r:" + r.id, "t:" + t.toLowerCase(), "tag"]); }
+    for (const rel of r.related || []){ const o = byTitle.get(normTitle(rel)); if (o && o.id !== r.id) G.edges.push(["r:" + r.id, "r:" + o.id, "rel"]); }
+  }
+  for (const id of [...G.nodes.keys()]) if (!keep.has(id)) G.nodes.delete(id);
+  for (const n of G.nodes.values()) n.deg = 0;
+  for (const [a, b] of G.edges){ const na = G.nodes.get(a), nb = G.nodes.get(b); if (na && nb){ na.deg++; nb.deg++; } }
+  $("memCount").textContent = `기록 ${recs.length}개 · 주제 ${[...G.nodes.values()].filter(n => n.kind === "tag").length}개`;
+  $("memEmpty").hidden = recs.length > 0;
+  const fresh = [...G.nodes.values()].some(n => performance.now() - n.born < 50);
+  for (let i = 0, k = fresh ? 240 : 0; i < k; i++) memStep(0.03);
+  if (newId){ G.flash = { id: "r:" + newId, t: performance.now() }; const n = G.nodes.get("r:" + newId); if (n) logLine("tool", "", "▸ 기록: " + n.label); }
+  if (G.sel && !G.nodes.has(G.sel)) closeCard();
+}
+
+function memResize(){
+  const r = memCv.getBoundingClientRect();
+  G.dpr = Math.min(devicePixelRatio || 1, 2); G.w = r.width; G.h = r.height;
+  memCv.width = Math.round(r.width * G.dpr); memCv.height = Math.round(r.height * G.dpr);
+}
+
+function memStep(dt){
+  const ns = [...G.nodes.values()];
+  // 서로 밀어내기 + 가운데로 살짝 끌기
+  for (let i = 0; i < ns.length; i++){
+    const a = ns[i];
+    a.vx -= a.x * 0.35 * dt; a.vy -= a.y * 0.35 * dt;
+    for (let j = i + 1; j < ns.length; j++){
+      const b = ns[j]; let dx = a.x - b.x, dy = a.y - b.y; let d2 = dx * dx + dy * dy + 0.01;
+      if (d2 > 360000) continue;
+      const f = 260000 / d2; const d = Math.sqrt(d2); dx /= d; dy /= d;   // 가까울수록 강하게 밀어냄 (거리 60px에서 약 72px/s²)
+      a.vx += dx * f * dt; a.vy += dy * f * dt; b.vx -= dx * f * dt; b.vy -= dy * f * dt;
+    }
+  }
+  // 연결선은 스프링
+  for (const [ia, ib, kind] of G.edges){
+    const a = G.nodes.get(ia), b = G.nodes.get(ib); if (!a || !b) continue;
+    const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || 1;
+    const rest = kind === "rel" ? 120 : 80, k = 5.5;
+    const f = (d - rest) * k * dt / d;
+    a.vx += dx * f; a.vy += dy * f; b.vx -= dx * f; b.vy -= dy * f;
+  }
+  for (const n of ns){
+    if (G.drag?.n === n) { n.vx = n.vy = 0; continue; }
+    n.vx *= Math.exp(-3.2 * dt); n.vy *= Math.exp(-3.2 * dt);
+    n.x += n.vx * dt; n.y += n.vy * dt;
+  }
+}
+
+const rgb = (a) => `rgba(${holoRGB.map(v => Math.round(v * 255)).join(",")},${a})`;
+function memMatch(n){
+  if (!G.query) return true;
+  const q = G.query;
+  return n.label.toLowerCase().includes(q) || (n.data && (n.data.content.toLowerCase().includes(q)));
+}
+
+function memDraw(now){
+  const c = memCx, { w, h, dpr } = G;
+  c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  c.clearRect(0, 0, w, h);
+  // 전체가 패널에 알맞게 들어오도록 배율을 부드럽게 맞춘다
+  let ext = 60;
+  for (const n of G.nodes.values()) ext = Math.max(ext, Math.abs(n.x) + 70, Math.abs(n.y) * (w / h) + 50);
+  const target = Math.max(0.35, Math.min(2.2, (w * 0.46) / ext));
+  G.scale = G.snap ? target : G.scale + (target - G.scale) * 0.06;   // 열 때는 바로 맞추고, 이후엔 부드럽게
+  G.snap = false;
+  c.save(); c.translate(w / 2, h / 2); c.scale(G.scale, G.scale);
+  const t = now / 1000;
+  // 연결선
+  for (const [ia, ib, kind] of G.edges){
+    const a = G.nodes.get(ia), b = G.nodes.get(ib); if (!a || !b) continue;
+    const hot = G.sel && (ia === G.sel || ib === G.sel);
+    const dim = G.query && !(memMatch(a) || memMatch(b));
+    c.strokeStyle = rgb(dim ? 0.05 : hot ? 0.75 : kind === "rel" ? 0.45 : 0.22);
+    c.lineWidth = hot ? 1.6 : kind === "rel" ? 1.2 : 0.8;
+    if (kind === "rel") c.setLineDash([]); else c.setLineDash([2, 4]);
+    c.beginPath(); c.moveTo(a.x, a.y); c.lineTo(b.x, b.y); c.stroke();
+  }
+  c.setLineDash([]);
+  // 별
+  for (const n of G.nodes.values()){
+    const age = Math.min(1, (now - n.born) / 900);
+    const rec = n.kind === "rec";
+    const match = memMatch(n);
+    const r = (rec ? 5 + Math.min(4, n.deg) : 2.6) * (0.3 + 0.7 * age);
+    const tw = 0.85 + 0.15 * Math.sin(t * 2 + n.x * 0.05);
+    const alpha = (match ? 1 : 0.18) * age;
+    const g = c.createRadialGradient(n.x, n.y, 0, n.x, n.y, r * 4.5);
+    g.addColorStop(0, rgb(0.55 * alpha * tw)); g.addColorStop(1, rgb(0));
+    c.fillStyle = g; c.beginPath(); c.arc(n.x, n.y, r * 4.5, 0, Math.PI * 2); c.fill();
+    c.fillStyle = rec ? `rgba(240,250,255,${alpha})` : rgb(0.85 * alpha);
+    c.beginPath(); c.arc(n.x, n.y, r, 0, Math.PI * 2); c.fill();
+    if (G.sel === n.id || G.hover === n.id){ c.strokeStyle = rgb(0.9); c.lineWidth = 1.2; c.beginPath(); c.arc(n.x, n.y, r + 5, 0, Math.PI * 2); c.stroke(); }
+    if (G.flash?.id === n.id){
+      const k = (now - G.flash.t) / 1800;
+      if (k < 1){ c.strokeStyle = rgb(0.8 * (1 - k)); c.lineWidth = 2; c.beginPath(); c.arc(n.x, n.y, r + 4 + k * 40, 0, Math.PI * 2); c.stroke(); }
+    }
+    c.font = rec ? "500 12px 'IBM Plex Sans KR', system-ui, sans-serif" : "11px 'JetBrains Mono', monospace";
+    c.fillStyle = rec ? `rgba(232,241,255,${0.9 * alpha})` : rgb(0.7 * alpha);
+    c.textAlign = "center";
+    // 작게 줄어든 화면(휴대폰)에서는 주제 이름을 숨겨 겹침을 줄인다 (선택·검색된 것은 표시)
+    const showLabel = rec || G.scale > 0.8 || G.sel === n.id || G.hover === n.id || (G.query && match);
+    if (showLabel){
+      const label = n.label.length > 14 ? n.label.slice(0, 13) + "…" : n.label;
+      c.font = (rec ? "500 " : "") + Math.round((rec ? 12 : 11) / Math.max(0.35, Math.min(1.4, G.scale))) + (rec ? "px 'IBM Plex Sans KR', system-ui, sans-serif" : "px 'JetBrains Mono', monospace");
+      c.fillText(label, n.x, n.y + r + (rec ? 15 : 12));
+    }
+  }
+  c.restore();
+}
+
+function memLoop(now){
+  if (!G.open){ G.raf = 0; return; }
+  const dt = Math.min(0.05, (now - (G.last || now)) / 1000); G.last = now;
+  memStep(dt); memDraw(now);
+  G.raf = requestAnimationFrame(memLoop);
+}
+
+function memHit(px, py){
+  const x = (px - G.w / 2) / G.scale, y = (py - G.h / 2) / G.scale;
+  let best = null, bd = (24 / G.scale) ** 2;
+  for (const n of G.nodes.values()){ const d = (n.x - x) ** 2 + (n.y - y) ** 2; if (d < bd){ bd = d; best = n; } }
+  return best;
+}
+const evPos = (e) => { const r = memCv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+memCv.addEventListener("pointerdown", (e) => {
+  const [x, y] = evPos(e); const n = memHit(x, y);
+  if (n){ G.drag = { n, moved: false, sx: x, sy: y }; memCv.setPointerCapture(e.pointerId); memCv.style.cursor = "grabbing"; }
+});
+memCv.addEventListener("pointermove", (e) => {
+  const [x, y] = evPos(e);
+  if (G.drag && !G.drag.moved && Math.hypot(x - G.drag.sx, y - G.drag.sy) < 5) return;   // 살짝 흔들린 클릭은 선택으로
+  if (G.drag){ G.drag.moved = true; G.drag.n.x = (x - G.w / 2) / G.scale; G.drag.n.y = (y - G.h / 2) / G.scale; return; }
+  const n = memHit(x, y); G.hover = n?.id || null; memCv.style.cursor = n ? "pointer" : "grab";
+});
+memCv.addEventListener("pointerup", () => {
+  if (G.drag && !G.drag.moved) selectNode(G.drag.n);
+  G.drag = null; memCv.style.cursor = "grab";
+});
+memCv.addEventListener("pointercancel", () => { G.drag = null; });
+
+function selectNode(n){
+  G.sel = n.id;
+  $("mcDelYes").hidden = true; $("mcDel").hidden = false;
+  if (n.kind === "rec"){
+    const r = n.data;
+    $("mcTitle").textContent = r.title;
+    $("mcMeta").textContent = [(r.tags || []).map(t => "#" + t).join(" "), "수정 " + new Date(r.updated).toLocaleString("ko-KR")].filter(Boolean).join(" · ");
+    $("mcBody").textContent = r.content;
+    $("mcDel").hidden = false;
+  } else {
+    const linked = G.edges.filter(e => e[1] === n.id).map(e => G.nodes.get(e[0])?.label).filter(Boolean);
+    $("mcTitle").textContent = n.label;
+    $("mcMeta").textContent = `주제 · 기록 ${linked.length}개`;
+    $("mcBody").textContent = linked.join("\n");
+    $("mcDel").hidden = true;
+  }
+  $("memCard").hidden = false;
+}
+function closeCard(){ G.sel = null; $("memCard").hidden = true; }
+$("mcClose").onclick = closeCard;
+$("mcDel").onclick = () => { $("mcDel").hidden = true; $("mcDelYes").hidden = false; };
+$("mcDelYes").onclick = async () => {
+  const n = G.nodes.get(G.sel); if (!n || n.kind !== "rec") return;
+  try { await memStore.remove(n.data.id); } catch (e) { showReply("기록을 지우지 못했습니다: " + e, true); return; }
+  closeCard(); memRefresh();
+};
+$("memSearch").addEventListener("input", (e) => { G.query = e.target.value.trim().toLowerCase(); });
+// 검색창 입력이 Space 말하기로 새지 않게
+for (const ev of ["keydown", "keyup"]) memEl.addEventListener(ev, (e) => { if (e.key === "Escape" && ev === "keydown") setMemOpen(false); e.stopPropagation(); });
+
+async function setMemOpen(open){
+  if (open === G.open) return;
+  G.open = open;
+  if (open){
+    memEl.hidden = false;
+    await memRefresh();
+    for (let i = 0; i < 400; i++) memStep(0.03);
+    G.snap = true;
+    requestAnimationFrame(() => { memEl.classList.add("open"); memResize(); if (!G.raf){ G.last = 0; G.raf = requestAnimationFrame(memLoop); } });
+  } else {
+    memEl.classList.remove("open"); closeCard();
+    setTimeout(() => { if (!G.open) memEl.hidden = true; }, 500);
+  }
+  $("memBtn").textContent = open ? "MEMORY ✕" : "MEMORY";
+}
+$("memBtn").onclick = () => setMemOpen(!G.open);
+$("memClose").onclick = () => setMemOpen(false);
+addEventListener("resize", () => { if (G.open) memResize(); });
+on("memory-changed", (p) => { memRefresh(p?.id); });
+on("memory-panel", (open) => setMemOpen(!!open));
+memRefresh();
 
 // 시계 + 타이머 표시
 function tick(){
@@ -1173,6 +1783,7 @@ async function refreshStatus(greet = true){
       : "데모 모드입니다, 주인님. SETTINGS에 무료 Groq API 키를 넣으면 실제로 대화할 수 있습니다.");
     return;
   }
+  document.body.classList.add("app"); $("settingsBtn").hidden = false;
   try{
     const s = await api.status();
     const b = $("stBrain"), e = $("stEar");
@@ -1225,6 +1836,28 @@ $("testBrainBtn").onclick = async () => {
     diag(["✗ 연결 실패", String(e.message || e), "", `키 형식: ${keyShape(key)}`, "자세한 로그: F12 → Console에서 [jarvis] 줄"], "bad");
   } finally { btn.disabled = false; }
 };
+$("testVoiceBtn").onclick = async () => {
+  const btn = $("testVoiceBtn"), choice = $("cfgTts").value, line = "안녕하세요, 주인님. 자비스 음성 시스템이 정상 작동 중입니다.";
+  btn.disabled = true;
+  const saved = cfg.tts; cfg.tts = choice;
+  try {
+    stopSpeaking();
+    if (choice === "browser"){
+      if (!synth) throw new Error("이 브라우저는 기본 음성 출력을 지원하지 않습니다.");
+      browserSpeak(line, ttsGen);
+      diag([`✓ 브라우저 기본 음성: ${voice ? voice.name : "기본 한국어 음성 없음 (영어 음성으로 읽힐 수 있음)"}`], voice ? "ok" : "bad");
+    } else {
+      diag(["Supertonic 준비 중… (처음이면 음성 모델을 받느라 시간이 걸립니다)"]);
+      const t0 = performance.now();
+      const st = await ensureSupertonic();
+      const t1 = performance.now();
+      await supertonicSpeak(line, ttsGen);
+      diag(["✓ Supertonic 재생", `목소리: ${choice} · 엔진: ${st.device}`, `준비 ${Math.round(t1 - t0)}ms · 첫 문장 생성 ${Math.round(performance.now() - t1)}ms`], "ok");
+    }
+  } catch (e) {
+    diag(["✗ 목소리 실패", String(e.message || e), "브라우저 기본 음성으로 바꿔 쓸 수 있습니다."], "bad");
+  } finally { cfg.tts = saved; btn.disabled = false; }
+};
 $("testMicBtn").onclick = async () => {
   const btn = $("testMicBtn"); btn.disabled = true;
   const saved = { whisper: cfg.whisper, groqKey: cfg.groqKey };
@@ -1249,9 +1882,10 @@ $("testMicBtn").onclick = async () => {
   }
 };
 function openSettings(){
+  $("cfgTts").value = cfg.tts;
   $("cfgModel").value = cfg.brain; $("cfgGroqKey").value = cfg.groqKey; $("cfgGeminiKey").value = cfg.geminiKey; $("cfgKey").value = cfg.apiKey; $("cfgWhisper").value = cfg.whisper;
-  syncKeyFields(); panel.hidden = false;
-  ({ groq: $("cfgGroqKey"), gemini: $("cfgGeminiKey"), claude: $("cfgKey") })[BRAINS[cfg.brain].provider].focus();
+  syncKeyFields(); panel.hidden = false; $("diagOut").hidden = true;
+  if (!isApp) ({ groq: $("cfgGroqKey"), gemini: $("cfgGeminiKey"), claude: $("cfgKey") })[BRAINS[cfg.brain].provider].focus();
 }
 function closeSettings(){ panel.hidden = true; }
 $("settingsBtn").onclick = openSettings;
@@ -1263,10 +1897,18 @@ $("cfgForm").addEventListener("submit", (e) => {
   const whisperChanged = cfg.whisper !== $("cfgWhisper").value;
   cfg.brain = $("cfgModel").value; cfg.groqKey = $("cfgGroqKey").value.trim(); cfg.geminiKey = $("cfgGeminiKey").value.trim(); cfg.apiKey = $("cfgKey").value.trim();
   cfg.whisper = $("cfgWhisper").value;
+  const ttsChanged = cfg.tts !== $("cfgTts").value;
+  cfg.tts = $("cfgTts").value;
   saveCfg();
+  if (ttsChanged){
+    if (cfg.tts === "browser") setVoiceStatus("브라우저");
+    else if (stReady) setVoiceStatus(`Supertonic ${cfg.tts} · ${stReady.device}`);
+    else ensureSupertonic().catch(() => {});
+  }
   if (whisperChanged){ api.resetWhisper?.(); $("stEar").textContent = earLabel(); $("stEar").classList.remove("bad"); }
   closeSettings(); refreshStatus(false);
-  showReply(activeKey() ? `${BRAINS[cfg.brain].label}로 연결했습니다, 주인님.` : "선택한 모델의 API 키가 비어 있습니다. 키를 넣어 주세요.", !activeKey());
+  if (isApp) showReply("설정을 저장했습니다, 주인님.");
+  else showReply(activeKey() ? `${BRAINS[cfg.brain].label}로 연결했습니다, 주인님.` : "선택한 모델의 API 키가 비어 있습니다. 키를 넣어 주세요.", !activeKey());
 });
 
 // ======================================================================
@@ -1505,6 +2147,10 @@ addEventListener("resize", resize); resize();
 const S = { energy:.25, level:0, speak:0, radius:.17, A:[...PALETTES.calm[0]], B:[...PALETTES.calm[1]], C:[...PALETTES.calm[2]] };
 const ease = (x, target, rate, dt) => x + (target - x)*(1 - Math.exp(-rate*dt));
 
+let captionTop = Infinity;
+const capEl = document.querySelector(".caption");
+const updCap = () => { const r = capEl.getBoundingClientRect(); captionTop = capEl.textContent.trim() ? r.top : Infinity; };
+new ResizeObserver(updCap).observe(capEl); addEventListener("resize", updCap); new MutationObserver(updCap).observe(capEl, { childList: true, subtree: true });
 let last = performance.now(), clock = 0;
 function frame(now){
   const dt = Math.min(.05, (now - last)/1000); last = now;
@@ -1514,6 +2160,7 @@ function frame(now){
   S.energy = ease(S.energy, targetEnergy, 2.2, dt);
   S.level = ease(S.level, micLevel, micLevel > S.level ? 18 : 6, dt);
   speakKick *= Math.exp(-dt*7);
+  speakKick = Math.max(speakKick, Math.min(1, ttsLevel() * 5));   // Supertonic 재생 음량에 맞춰 코어가 맥동
   const speakTarget = mode === "speaking" ? .45 + .55*Math.max(speakKick, .5 + .5*Math.sin(clock*8.5)) : 0;
   S.speak = ease(S.speak, speakTarget, 9, dt);
   const pal = PALETTES[mood];
@@ -1534,8 +2181,15 @@ function frame(now){
 
   const narrow = W/H < 1;
   S.radius = ease(S.radius, narrow ? .12 : .165, 3, dt);
-  const cx = W*.5 + look.x*W*.045, cy = H*(narrow ? .58 : .56) + look.y*H*.05;
-  document.documentElement.style.setProperty("--orb-px", Math.round(S.radius*H/dpr) + "px");
+  // 답변이 길어 자막이 올라오면 구체도 그만큼 위로 떠오른다 (겹치지 않게)
+  const vh = H / dpr, rPx = S.radius * vh;
+  const baseTop = vh * (narrow ? .40 : .44);
+  const fitTop = Math.max(rPx + 70, Math.min(baseTop, captionTop - rPx - 40));
+  S.orbTop = ease(S.orbTop ?? baseTop, fitTop, 2.6, dt);
+  const cx = W*.5 + look.x*W*.045, cy = H - S.orbTop*dpr + look.y*H*.05;
+  const rootStyle = document.documentElement.style;
+  rootStyle.setProperty("--orb-px", Math.round(rPx) + "px");
+  rootStyle.setProperty("--state-y", Math.round(S.orbTop - look.y*vh*.05 + rPx + 18) + "px");
 
   gl.disable(gl.BLEND);
   gl.useProgram(sky.p); gl.bindVertexArray(skyVao);
