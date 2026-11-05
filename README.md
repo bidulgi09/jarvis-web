@@ -80,7 +80,28 @@ cargo tauri dev --features cuda    # NVIDIA GPU로 Whisper 가속
 
 - **Space를 누르고 있는 동안 말하기**, 떼면 받아적고 대답
 - 마이크 버튼을 길게 눌러도 됨
+- **손 제스처** (하단 `HAND` 버튼으로 카메라 켜기)
+  - ✋ 손바닥을 펴고 0.4초 유지 → 듣기 시작
+  - ✊ 주먹 쥐기 → 듣기 끝, 받아적어서 보내기
+  - 듣는 중에 손이 2초 넘게 화면에서 사라지면 그대로 보냄
+- 홀로그램은 마우스 방향으로, 카메라가 켜져 있으면 손 방향으로 살짝 기울어짐
 - 예: "크롬 열어줘", "유튜브에서 로파이 찾아줘", "라면 타이머 3분", "성운 모드로 바꿔줘", "볼륨 30으로"
+
+### 손 인식 오프라인으로 쓰기 (선택)
+
+손 인식은 [MediaPipe Hand Landmarker](https://ai.google.dev/edge/mediapipe/solutions/vision/hand_landmarker)를 웹뷰에서 돌립니다.
+카메라 영상은 기기 안에서만 처리되고, 기본으로는 라이브러리와 모델(약 7.5MB)을 처음에 인터넷에서 받아옵니다.
+인터넷 없이 쓰려면 아래 파일을 `ui/vendor/`에 넣어두면 자동으로 그쪽을 먼저 씁니다.
+
+```
+ui/vendor/hand_landmarker.task           ← storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task
+ui/vendor/tasks-vision/vision_bundle.mjs ← npm 패키지 @mediapipe/tasks-vision@0.10.14
+ui/vendor/tasks-vision/wasm/             ← 같은 패키지의 wasm 폴더
+```
+
+제스처 판정 방식: 21개 손 관절 중 각 손가락 끝이 손목에서 두 번째 마디(PIP)보다 1.15배 이상 멀면 '펴짐'으로 봅니다.
+네 손가락과 엄지가 모두 펴지면 ✋, 모두 손바닥 쪽으로 말리면 ✊이고, 같은 모양이 0.38초 유지되어야 확정해서 손 떨림으로 오작동하지 않게 했습니다.
+기준값은 `ui/index.html`의 `GESTURE`와 `classify()`에서 바꿀 수 있습니다.
 
 홀로그램만 보고 싶으면 `ui/index.html`을 브라우저로 열면 데모 모드로 돌아갑니다.
 

@@ -86,6 +86,11 @@ body{background:var(--void);color:var(--ink);font-family:var(--f-body);font-size
 .hint kbd{font-family:inherit;border:1px solid var(--faint);padding:1px 6px;border-radius:4px;color:var(--ink)}
 .hint button{background:none;border:0;color:var(--dim);font:inherit;letter-spacing:inherit;cursor:pointer;padding:0}
 .hint button:hover{color:var(--ink)}
+.cam{position:absolute;left:0;bottom:0;display:flex;flex-direction:column;gap:6px;align-items:flex-start;animation:rise .7s var(--ease) both}
+.cam[hidden]{display:none}
+.cam canvas{width:176px;height:132px;border-radius:14px;border:1px solid var(--faint);background:rgba(8,8,24,.6);display:block}
+.cam .g{font-family:var(--f-mono);font-size:11px;letter-spacing:.14em;color:var(--dim);transition:color .4s var(--ease)}
+.cam .g.hot{color:var(--holo)}
 .demo{position:fixed;left:50%;top:calc(14px + env(safe-area-inset-top,0px));transform:translateX(-50%);font-family:var(--f-mono);font-size:10px;letter-spacing:.2em;color:var(--warm);
   border:1px solid rgba(255,207,138,.35);padding:4px 10px;border-radius:12px;background:rgba(20,12,4,.4);pointer-events:none;white-space:nowrap}
 button:focus-visible,input:focus-visible{outline:2px solid var(--holo);outline-offset:3px}
@@ -109,6 +114,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--holo);outline-o
 </head>
 <body>
 <canvas id="sky" aria-hidden="true"></canvas>
+<video id="camVideo" playsinline muted hidden></video>
 
 <div class="hud">
   <div class="row">
@@ -117,6 +123,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--holo);outline-o
       <div class="clock" id="clock">00:00</div>
       <span>두뇌</span><b id="stBrain">확인 중</b>
       <span>음성인식</span><b id="stEar">확인 중</b>
+      <span>손 인식</span><b id="stHand">꺼짐</b>
     </div>
   </div>
 
@@ -124,6 +131,10 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--holo);outline-o
     <div class="log" id="log" aria-live="polite"></div>
     <div class="timers" id="timers"></div>
     <div class="state" id="state" data-m="idle">STANDBY</div>
+    <div class="cam" id="cam" hidden>
+      <canvas id="camView" width="352" height="264" aria-label="손 인식 카메라 미리보기"></canvas>
+      <div class="g" id="gesture">손을 보여주세요</div>
+    </div>
   </div>
 
   <div class="bottom">
@@ -141,7 +152,8 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--holo);outline-o
       </div>
     </form>
     <div class="hint">
-      <span><kbd>Space</kbd> 누르고 있는 동안 말하기</span>
+      <span><kbd>Space</kbd> 누르고 있는 동안 말하기 · ✋ 펴면 듣기, ✊ 쥐면 보내기</span>
+      <button type="button" id="handBtn">HAND OFF</button>
       <button type="button" id="logBtn">LOG</button>
       <button type="button" id="voiceBtn">VOICE ON</button>
       <button type="button" id="resetBtn">RESET</button>
@@ -308,18 +320,19 @@ $("form").addEventListener("submit", (e) => { e.preventDefault(); const b = $("b
 // ======================================================================
 //  누르고 말하기 (Space 또는 마이크 버튼)
 // ======================================================================
-let holding = false;
-async function pttDown(){
+let holding = false, holdSource = null;   // 누가 듣기를 시작했나: key | pointer | hand
+async function pttDown(src = "key"){
   if (holding || busy) return;
-  holding = true; synth?.cancel();
+  holding = true; holdSource = src; synth?.cancel();
   $("mic").setAttribute("aria-pressed","true");
   setMode("listening"); $("heard").textContent = "듣고 있습니다…";
   try{ await api.startListening(); }
   catch(e){ holding = false; $("mic").setAttribute("aria-pressed","false"); setMode("idle"); $("heard").textContent = ""; showReply(String(e), true); }
 }
-async function pttUp(){
+async function pttUp(src){
   if (!holding) return;
-  holding = false; $("mic").setAttribute("aria-pressed","false");
+  if (src && holdSource && src !== holdSource) return;   // 손으로 시작한 녹음을 Space 떼기가 끊지 않게
+  holding = false; holdSource = null; $("mic").setAttribute("aria-pressed","false");
   setMode("thinking"); $("heard").textContent = "받아적는 중…";
   let text = "";
   try{ text = await api.stopListening(); }
@@ -328,15 +341,169 @@ async function pttUp(){
   ask(text);
 }
 const mic = $("mic");
-mic.addEventListener("pointerdown", (e) => { e.preventDefault(); mic.setPointerCapture?.(e.pointerId); pttDown(); });
-mic.addEventListener("pointerup", pttUp);
-mic.addEventListener("pointercancel", pttUp);
+mic.addEventListener("pointerdown", (e) => { e.preventDefault(); mic.setPointerCapture?.(e.pointerId); pttDown("pointer"); });
+mic.addEventListener("pointerup", () => pttUp("pointer"));
+mic.addEventListener("pointercancel", () => pttUp("pointer"));
 addEventListener("keydown", (e) => {
   if (e.code !== "Space" || e.repeat || e.target === $("box")) return;
-  e.preventDefault(); pttDown();
+  e.preventDefault(); pttDown("key");
 });
-addEventListener("keyup", (e) => { if (e.code === "Space" && e.target !== $("box")) { e.preventDefault(); pttUp(); } });
-addEventListener("blur", pttUp);
+addEventListener("keyup", (e) => { if (e.code === "Space" && e.target !== $("box")) { e.preventDefault(); pttUp("key"); } });
+addEventListener("blur", () => pttUp("key"));
+
+// ======================================================================
+//  시선(마우스/손) → 홀로그램 시차
+// ======================================================================
+const look = { x: 0, y: 0, tx: 0, ty: 0 };      // -1..1, 위쪽이 +y
+let handLook = null;                           // 손이 보이면 손 위치가 마우스보다 우선
+addEventListener("pointermove", (e) => {
+  look.tx = (e.clientX / innerWidth) * 2 - 1;
+  look.ty = -((e.clientY / innerHeight) * 2 - 1);
+}, { passive: true });
+document.addEventListener("pointerleave", () => { look.tx = 0; look.ty = 0; });
+
+// ======================================================================
+//  손 제스처 (MediaPipe Hand Landmarker)
+//    ✋ 손바닥 펴기를 잠깐 유지 → 듣기 시작
+//    ✊ 주먹 쥐기               → 듣기 끝, 받아적어 보내기
+// ======================================================================
+const GESTURE = { start: "open", stop: "fist", holdMs: 380, lostMs: 2200 };
+const VISION_VER = "0.10.14";
+const VISION = {
+  // ui/vendor에 받아두면 인터넷 없이도 동작 (README 참고). 없으면 CDN 사용.
+  bundle: [`./vendor/tasks-vision/vision_bundle.mjs`, `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${VISION_VER}/vision_bundle.mjs`],
+  wasm:   [`./vendor/tasks-vision/wasm`, `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${VISION_VER}/wasm`],
+  model:  [`./vendor/hand_landmarker.task`, `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`],
+};
+const GESTURE_LABEL = { open:"✋ 펼침 · 듣기", fist:"✊ 주먹 · 보내기", other:"손 인식 중", none:"손을 보여주세요" };
+
+const hand = { on:false, stream:null, landmarker:null, lastTs:-1, raw:"none", rawSince:0, stable:"none", lostAt:0, lm:null };
+const camVideo = $("camVideo"), camView = $("camView"), camCtx = camView.getContext("2d");
+
+async function firstAvailable(urls, kind){
+  for (const u of urls){
+    if (/^https?:/.test(u)) return u;
+    try {
+      const ctl = new AbortController();
+      const r = await fetch(kind === "dir" ? u + "/vision_wasm_internal.js" : u, { signal: ctl.signal });
+      ctl.abort();                                   // 헤더만 확인하고 본문은 받지 않는다
+      if (r.ok) return u;
+    } catch {}
+  }
+  return urls[urls.length - 1];
+}
+
+async function startHand(){
+  if (hand.on) return;
+  $("stHand").textContent = "카메라 켜는 중"; $("stHand").classList.remove("bad");
+  try{
+    hand.stream = await navigator.mediaDevices.getUserMedia({ video:{ width:640, height:480, facingMode:"user" }, audio:false });
+  }catch(e){
+    $("stHand").textContent = e?.name === "NotAllowedError" ? "카메라 거부됨" : "카메라 없음"; $("stHand").classList.add("bad");
+    showReply(e?.name === "NotAllowedError" ? "카메라 권한이 거부되었습니다. 설정에서 허용해 주세요." : "카메라를 찾을 수 없습니다.", true);
+    return;
+  }
+  camVideo.srcObject = hand.stream; await camVideo.play().catch(()=>{});
+  hand.on = true; $("cam").hidden = false; syncHandBtn();
+  try{
+    if (!hand.landmarker){
+      $("stHand").textContent = "모델 불러오는 중";
+      const vision = await import(await firstAvailable(VISION.bundle, "file"));
+      const files = await vision.FilesetResolver.forVisionTasks(await firstAvailable(VISION.wasm, "dir"));
+      hand.landmarker = await vision.HandLandmarker.createFromOptions(files, {
+        baseOptions: { modelAssetPath: await firstAvailable(VISION.model, "file"), delegate: "GPU" },
+        runningMode: "VIDEO", numHands: 1,
+        minHandDetectionConfidence: 0.6, minHandPresenceConfidence: 0.6, minTrackingConfidence: 0.5,
+      });
+    }
+    $("stHand").textContent = "켜짐";
+  }catch(e){
+    console.error(e);
+    $("stHand").textContent = "모델 실패"; $("stHand").classList.add("bad");
+    showReply("손 인식 모델을 불러오지 못했습니다. 인터넷 연결이나 ui/vendor 파일을 확인해 주세요.", true);
+    stopHand(); return;
+  }
+  try { localStorage.setItem("jarvis.hand", "on"); } catch {}
+}
+function stopHand(){
+  hand.on = false; hand.stream?.getTracks().forEach(t => t.stop()); hand.stream = null;
+  camVideo.srcObject = null; $("cam").hidden = true; handLook = null; hand.lm = null;
+  hand.raw = hand.stable = "none";
+  if (holdSource === "hand") pttUp("hand");
+  if (!$("stHand").classList.contains("bad")) $("stHand").textContent = "꺼짐";
+  syncHandBtn();
+  try { localStorage.setItem("jarvis.hand", "off"); } catch {}
+}
+function syncHandBtn(){ $("handBtn").textContent = hand.on ? "HAND ON" : "HAND OFF"; }
+$("handBtn").onclick = () => hand.on ? stopHand() : startHand();
+
+// 손가락 끝이 PIP 관절보다 손목에서 충분히 멀면 '펴짐'
+function classify(lm){
+  const d = (a, b) => Math.hypot(lm[a].x - lm[b].x, lm[a].y - lm[b].y, (lm[a].z - lm[b].z) * 0.6);
+  const palm = d(0, 9) || 1e-3;
+  const ext = [[8,6],[12,10],[16,14],[20,18]].map(([tip, pip]) => d(tip, 0) > d(pip, 0) * 1.15);
+  const n = ext.filter(Boolean).length;
+  const thumbOut = d(4, 5) > palm * 0.5;
+  const curled = [8,12,16,20].every(t => d(t, 0) < palm * 1.25);
+  if (n === 4 && thumbOut) return "open";
+  if (n === 0 && curled) return "fist";
+  return "other";
+}
+
+function handTick(now){
+  if (!hand.on || !hand.landmarker || camVideo.readyState < 2) return;
+  if (now - hand.lastTs < 45) return;            // 약 20fps면 충분
+  hand.lastTs = now;
+  let res;
+  try { res = hand.landmarker.detectForVideo(camVideo, now); } catch { return; }
+  const lm = res?.landmarks?.[0] || null;
+  hand.lm = lm;
+  const g = lm ? classify(lm) : "none";
+  if (g !== hand.raw){ hand.raw = g; hand.rawSince = now; }
+
+  if (lm){
+    hand.lostAt = 0;
+    const c = lm[9];                               // 손바닥 중심 (화면은 거울상)
+    handLook = { x: -(c.x * 2 - 1), y: -(c.y * 2 - 1) };
+  } else {
+    handLook = null;
+    if (!hand.lostAt) hand.lostAt = now;
+    if (holdSource === "hand" && now - hand.lostAt > GESTURE.lostMs) pttUp("hand");   // 손이 사라지면 그대로 보낸다
+  }
+
+  // 같은 모양이 holdMs 동안 유지되어야 확정 (손 떨림·전환 중 오작동 방지)
+  if (hand.raw !== hand.stable && now - hand.rawSince >= GESTURE.holdMs){
+    hand.stable = hand.raw;
+    if (hand.stable === GESTURE.start && !holding && !busy) pttDown("hand");
+    else if (hand.stable === GESTURE.stop && holdSource === "hand") pttUp("hand");
+  }
+  const gl = $("gesture");
+  gl.textContent = holdSource === "hand" ? "듣는 중 · ✊ 쥐면 보내기" : GESTURE_LABEL[hand.stable] || GESTURE_LABEL.other;
+  gl.classList.toggle("hot", holdSource === "hand" || hand.stable === "open");
+  drawCam(lm);
+}
+
+const BONES = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
+function drawCam(lm){
+  const w = camView.width, h = camView.height;
+  camCtx.save();
+  camCtx.clearRect(0, 0, w, h);
+  camCtx.translate(w, 0); camCtx.scale(-1, 1);       // 거울처럼
+  camCtx.globalAlpha = 0.35; camCtx.drawImage(camVideo, 0, 0, w, h); camCtx.globalAlpha = 1;
+  if (lm){
+    const col = `rgb(${holoRGB.map(v => Math.round(v*255)).join(",")})`;
+    camCtx.strokeStyle = col; camCtx.fillStyle = col; camCtx.lineWidth = 2;
+    camCtx.shadowColor = col; camCtx.shadowBlur = 8;
+    camCtx.beginPath();
+    for (const [a, b] of BONES){ camCtx.moveTo(lm[a].x*w, lm[a].y*h); camCtx.lineTo(lm[b].x*w, lm[b].y*h); }
+    camCtx.stroke();
+    for (const p of lm){ camCtx.beginPath(); camCtx.arc(p.x*w, p.y*h, 3, 0, Math.PI*2); camCtx.fill(); }
+  }
+  camCtx.restore();
+}
+let holoRGB = [0.47, 0.95, 1.0];   // 렌더러가 매 프레임 현재 홀로그램 색으로 갱신
+(function handLoop(now){ handTick(now || 0); requestAnimationFrame(handLoop); })();
+try { if (localStorage.getItem("jarvis.hand") === "on" && isApp) startHand(); } catch {}
 
 // ======================================================================
 //  백엔드 이벤트
@@ -432,6 +599,7 @@ out vec4 o;
 uniform vec2 uRes, uCenter;
 uniform float uTime, uEnergy, uLevel, uSpeak, uRadius;
 uniform vec3 uColA, uColB, uColC;
+uniform vec2 uLook;   // 마우스/손 방향 (-1..1)
 
 float hash(vec2 p){ p = fract(p*vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x*p.y); }
 float noise(vec2 p){
@@ -447,7 +615,8 @@ vec3 stars(vec2 uv, float t){
   vec3 c = vec3(0);
   for (int L = 0; L < 3; L++){
     float fl = float(L), s = 38. + fl*52.;
-    vec2 g = uv*s + vec2(fl*17.3 + t*0.006*(fl + 1.)*s, fl*5.1);
+    // 가까운 별 층일수록 시선 반대쪽으로 더 많이 움직여 깊이감이 생긴다
+    vec2 g = (uv - uLook*(.006 + .012*fl))*s + vec2(fl*17.3 + t*0.006*(fl + 1.)*s, fl*5.1);
     vec2 id = floor(g), f = fract(g) - .5;
     float h = hash(id + fl*7.1);
     if (h > .93){
@@ -474,7 +643,7 @@ void main(){
   vec2 bg = uv - lens*uRadius;
 
   // 성운: 도메인 워핑 fbm
-  vec2 q = bg*1.55 + vec2(t*.010, -t*.007);
+  vec2 q = (bg - uLook*.02)*1.55 + vec2(t*.010, -t*.007);
   float w1 = fbm(q + 1.5*fbm(q*1.3 + vec2(t*.018, 0.)));
   float w2 = fbm(q*2.2 - vec2(t*.013, -t*.004) + 3.7);
   float w3 = fbm(q*.6 + 11.);
@@ -493,9 +662,9 @@ void main(){
   if (r < 1.){
     float z = sqrt(1. - r*r);
     vec3 n = vec3(p, z);
-    float tl = .42, ct = cos(tl), st = sin(tl);
+    float tl = .42 - uLook.y*.3, ct = cos(tl), st = sin(tl);
     n = vec3(n.x, ct*n.y - st*n.z, st*n.y + ct*n.z);
-    float sp = t*.16*(.55 + uEnergy);
+    float sp = t*.16*(.55 + uEnergy) - uLook.x*.45;
     float cy = cos(sp), sy = sin(sp);
     n = vec3(cy*n.x + sy*n.z, n.y, -sy*n.x + cy*n.z);
     float lat = asin(clamp(n.y, -1., 1.));
@@ -518,8 +687,8 @@ void main(){
   for (int i = 0; i < 3; i++){
     float fi = float(i);
     float R = 1.38 + fi*.34;
-    float inc = 1.16 + fi*.11;
-    float phi = .32 - fi*.58 + sin(t*.045 + fi*1.7)*.09;
+    float inc = 1.16 + fi*.11 - uLook.y*(.10 + .04*fi);
+    float phi = .32 - fi*.58 + sin(t*.045 + fi*1.7)*.09 + uLook.x*(.10 + .03*fi);
     float c = cos(phi), s = sin(phi);
     vec2 qq = vec2(c*p.x + s*p.y, -s*p.x + c*p.y);
     float ci = cos(inc);
@@ -549,15 +718,16 @@ const P_VS = `#version 300 es
 in vec4 aP;  // 반지름, 시작 각도, 높이, 시드
 uniform vec2 uRes, uCenter;
 uniform float uTime, uEnergy, uLevel, uRadius, uDpr;
+uniform vec2 uLook;
 out float vA; out float vMix;
 void main(){
   float rr = aP.x;
   float a = aP.y + uTime*(.85/pow(rr, 1.5))*(.3 + .9*uEnergy);
   float br = 1. + .035*sin(uTime*.7 + aP.w*6.283) + uLevel*.10*aP.w;
   vec3 pos = vec3(cos(a)*rr*br, aP.z, sin(a)*rr*br);
-  float tl = 1.22, c = cos(tl), s = sin(tl);
+  float tl = 1.22 - uLook.y*.22, c = cos(tl), s = sin(tl);
   pos = vec3(pos.x, c*pos.y - s*pos.z, s*pos.y + c*pos.z);
-  float ph = -.22, cp = cos(ph), sp = sin(ph);
+  float ph = -.22 + uLook.x*.14, cp = cos(ph), sp = sin(ph);
   pos.xy = vec2(cp*pos.x - sp*pos.y, sp*pos.x + cp*pos.y);
   float persp = 1./(1. + pos.z*.16);
   vec2 scr = uCenter + pos.xy*persp*uRadius*uRes.y;
@@ -644,9 +814,17 @@ function frame(now){
   const pal = PALETTES[mood];
   for (let k = 0; k < 3; k++){ S.A[k] = ease(S.A[k], pal[0][k], 1.4, dt); S.B[k] = ease(S.B[k], pal[1][k], 1.1, dt); S.C[k] = ease(S.C[k], pal[2][k], 1.2, dt); }
 
+  holoRGB = S.A;
+
+  // 시선: 손이 보이면 손, 아니면 마우스. 느린 지수 감쇠라 따라오되 미끄러지듯 움직인다
+  const src = handLook || { x: look.tx, y: look.ty };
+  const lookGain = reduce ? .35 : 1;
+  look.x = ease(look.x, Math.max(-1, Math.min(1, src.x))*lookGain, 2.4, dt);
+  look.y = ease(look.y, Math.max(-1, Math.min(1, src.y))*lookGain, 2.4, dt);
+
   const narrow = W/H < 1;
   S.radius = ease(S.radius, narrow ? .12 : .165, 3, dt);
-  const cx = W*.5, cy = H*(narrow ? .58 : .56);
+  const cx = W*.5 + look.x*W*.012, cy = H*(narrow ? .58 : .56) + look.y*H*.014;
   document.documentElement.style.setProperty("--orb-px", Math.round(S.radius*H/dpr) + "px");
 
   gl.disable(gl.BLEND);
@@ -656,6 +834,7 @@ function frame(now){
   gl.uniform1f(su.uTime, clock); gl.uniform1f(su.uEnergy, S.energy); gl.uniform1f(su.uLevel, S.level);
   gl.uniform1f(su.uSpeak, S.speak); gl.uniform1f(su.uRadius, S.radius);
   gl.uniform3fv(su.uColA, S.A); gl.uniform3fv(su.uColB, S.B); gl.uniform3fv(su.uColC, S.C);
+  gl.uniform2f(su.uLook, look.x, look.y);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
 
   gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
@@ -665,6 +844,7 @@ function frame(now){
   gl.uniform1f(pu.uTime, clock); gl.uniform1f(pu.uEnergy, S.energy); gl.uniform1f(pu.uLevel, S.level);
   gl.uniform1f(pu.uRadius, S.radius); gl.uniform1f(pu.uDpr, dpr);
   gl.uniform3fv(pu.uColA, S.A); gl.uniform3fv(pu.uColC, S.C);
+  gl.uniform2f(pu.uLook, look.x, look.y);
   gl.drawArrays(gl.POINTS, 0, N);
 
   requestAnimationFrame(frame);
