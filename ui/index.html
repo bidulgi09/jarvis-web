@@ -175,20 +175,34 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--holo);outline-o
     </div>
   </div>
 </div>
-<div class="demo" id="demo" hidden>DEMO · SETTINGS에 API 키를 넣으면 실제로 대화합니다</div>
+<div class="demo" id="demo" hidden>DEMO · SETTINGS에 무료 Gemini 키를 넣으면 실제로 대화합니다</div>
 
 <div class="settings" id="settings" hidden role="dialog" aria-modal="true" aria-labelledby="cfgTitle">
   <form class="sheet" id="cfgForm" autocomplete="off">
     <h2 id="cfgTitle">SETTINGS</h2>
-    <label for="cfgKey">Claude API 키</label>
-    <input id="cfgKey" type="password" placeholder="sk-ant-..." spellcheck="false">
-    <p class="note">키는 이 브라우저에만 저장되고 Anthropic 서버로만 보내집니다. 공용 컴퓨터에서는 넣지 마세요.
-      키는 <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>에서 발급합니다.</p>
     <label for="cfgModel">두뇌 모델</label>
     <select id="cfgModel">
-      <option value="claude-haiku-5-5">Claude Haiku 5.5 · 빠름</option>
-      <option value="claude-sonnet-5-5">Claude Sonnet 5.5 · 똑똑함</option>
+      <optgroup label="무료 (Google AI Studio)">
+        <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash-Lite · 무료 · 추천</option>
+        <option value="gemini-3.8-flash">Gemini 3.8 Flash · 무료 · 하루 사용량 적음</option>
+      </optgroup>
+      <optgroup label="유료 (Anthropic)">
+        <option value="claude-haiku-5-5">Claude Haiku 5.5</option>
+        <option value="claude-sonnet-5-5">Claude Sonnet 5.5</option>
+      </optgroup>
     </select>
+    <div id="keyGemini">
+      <label for="cfgGeminiKey">Gemini API 키</label>
+      <input id="cfgGeminiKey" type="password" placeholder="AIza..." spellcheck="false">
+      <p class="note">카드 등록 없이 무료로 받을 수 있습니다: <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>
+        → Create API key. 무료 등급은 대화 내용이 Google 서비스 개선에 쓰일 수 있습니다.</p>
+    </div>
+    <div id="keyClaude" hidden>
+      <label for="cfgKey">Claude API 키</label>
+      <input id="cfgKey" type="password" placeholder="sk-ant-..." spellcheck="false">
+      <p class="note">키는 <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>에서 발급합니다.</p>
+    </div>
+    <p class="note">키는 이 브라우저에만 저장되고 해당 회사 서버로만 보내집니다. 공용 컴퓨터에서는 넣지 마세요.</p>
     <label for="cfgWhisper">음성 인식 (브라우저 Whisper)</label>
     <select id="cfgWhisper">
       <option value="tiny">tiny · 약 40MB · 가장 빠름</option>
@@ -230,12 +244,21 @@ const api = isApp ? {
 } : webApi();
 
 // ======================================================================
-//  웹 버전: 브라우저 Whisper + Claude (API 키 직접 / claude.ai 계정)
+//  웹 버전: 브라우저 Whisper + Gemini(무료) / Claude / claude.ai 계정
 // ======================================================================
 const CFG_KEY = "jarvis.web";
-const cfg = Object.assign({ apiKey: "", model: "claude-haiku-5-5", whisper: "base" },
+const BRAINS = {
+  "gemini-3.5-flash-lite": { provider: "gemini", label: "Gemini 3.5 Flash-Lite" },
+  "gemini-3.8-flash":      { provider: "gemini", label: "Gemini 3.8 Flash" },
+  "claude-haiku-5-5":      { provider: "claude", label: "Claude Haiku 5.5" },
+  "claude-sonnet-5-5":     { provider: "claude", label: "Claude Sonnet 5.5" },
+};
+const cfg = Object.assign({ brain: "gemini-3.5-flash-lite", geminiKey: "", apiKey: "", whisper: "base" },
   (() => { try { return JSON.parse(localStorage.getItem(CFG_KEY) || "{}"); } catch { return {}; } })());
+if (!BRAINS[cfg.brain]) cfg.brain = "gemini-3.5-flash-lite";
 function saveCfg(){ try { localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); } catch {} }
+const provider = () => BRAINS[cfg.brain].provider;
+const activeKey = () => provider() === "gemini" ? cfg.geminiKey : cfg.apiKey;
 
 const TRANSFORMERS_URL = "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.2";
 let pendingLinks = [];
@@ -244,6 +267,7 @@ function webSystemPrompt(){
   return `너는 토니 스타크의 AI 비서 J.A.R.V.I.S.다. 사용자를 '주인님'이라 부르고, 침착하고 정중하며 살짝 위트 있는 영국 집사 같은 말투의 한국어로 답한다.
 답변은 음성으로 읽히므로 보통 1~3문장으로 짧게, 마크다운·이모지·목록 기호 없이 말하듯 쓴다.
 사용자의 말은 음성 인식 결과라 오타가 있을 수 있으니 의도를 추론한다.
+타이머, 홀로그램 분위기, 링크 열기, 시각 확인은 반드시 도구를 호출해서 처리한다.
 지금은 웹 브라우저에서 동작 중이라 PC 프로그램 실행과 볼륨 조절은 할 수 없다. 요청받으면 데스크톱 앱에서 가능하다고 짧게 안내한다.
 현재 시각: ${new Date().toLocaleString("ko-KR")}`;
 }
@@ -252,8 +276,8 @@ const WEB_TOOLS = [
   { name: "get_datetime", description: "현재 날짜, 요일, 시각을 돌려준다.",
     input_schema: { type: "object", properties: {} },
     run: () => new Date().toLocaleString("ko-KR", { dateStyle: "full", timeStyle: "short" }) },
-  { name: "set_timer", description: "초 단위 타이머를 건다. 끝나면 홀로그램이 알리고 자비스가 말한다.",
-    input_schema: { type: "object", properties: { seconds: { type: "integer", minimum: 1, maximum: 86400 }, label: { type: "string" } }, required: ["seconds"] },
+  { name: "set_timer", description: "초 단위 타이머를 건다. 끝나면 홀로그램이 알리고 자비스가 말한다. seconds는 1~86400.",
+    input_schema: { type: "object", properties: { seconds: { type: "integer" }, label: { type: "string" } }, required: ["seconds"] },
     run: (i) => {
       const secs = Math.max(1, Math.min(86400, Math.round(Number(i.seconds)) || 0));
       if (!secs) throw new Error("seconds가 올바르지 않습니다");
@@ -265,7 +289,7 @@ const WEB_TOOLS = [
   { name: "set_hologram", description: "홀로그램 분위기를 바꾼다. calm(기본 청록), focus(맑은 백청색), nebula(보라·자홍 성운), alert(호박색 경계).",
     input_schema: { type: "object", properties: { mood: { type: "string", enum: ["calm", "focus", "nebula", "alert"] } }, required: ["mood"] },
     run: (i) => { const m = String(i.mood); if (!["calm","focus","nebula","alert"].includes(m)) throw new Error("알 수 없는 분위기"); fire("hologram", m); return "홀로그램 " + m; } },
-  { name: "open_url", description: "https 주소를 새 탭으로 연다. 검색은 검색 결과 페이지 URL을 만들어 연다.",
+  { name: "open_url", description: "https 주소를 화면에 링크로 띄운다. 검색은 검색 결과 페이지 URL을 만들어 넘긴다.",
     input_schema: { type: "object", properties: { url: { type: "string" }, title: { type: "string" } }, required: ["url"] },
     run: (i) => {
       const url = String(i.url || "");
@@ -288,14 +312,72 @@ function webApi(){
     .then(s => (claudeSample = s)).catch(() => null);
 
   // ---- 두뇌 ----
-  let hist = [];          // Anthropic API 형식
+  let hist = [];          // Anthropic 형식
+  let ghist = [];         // Gemini 형식 (role: user | model, parts)
   let turns = [];         // claude.ai sample 형식
   const SAMPLE_ERR = { not_granted: "Claude 사용이 허용되지 않았습니다. 새로고침 후 허용해 주세요.", rate_limited: "요청이 너무 많습니다. 잠시 후 다시 말씀해 주세요.",
     session_expired: "claude.ai 로그인이 만료되었습니다.", refused: "그 요청은 처리할 수 없습니다." };
 
   function trim(){
     while (hist.length > 30){ hist.shift(); while (hist.length && !(hist[0].role === "user" && typeof hist[0].content === "string")) hist.shift(); }
+    while (ghist.length > 30){ ghist.shift(); while (ghist.length && !(ghist[0].role === "user" && ghist[0].parts?.[0]?.text != null)) ghist.shift(); }
     while (turns.length > 24){ turns.shift(); while (turns.length && turns[0].role !== "user") turns.shift(); }
+  }
+
+  // Gemini: 도구가 인자를 안 받으면 parameters를 아예 빼야 한다 (빈 OBJECT는 거절됨)
+  const geminiTools = () => [{ functionDeclarations: WEB_TOOLS.map(({ name, description, input_schema }) =>
+    Object.keys(input_schema.properties || {}).length ? { name, description, parameters: input_schema } : { name, description }) }];
+
+  async function askGemini(text){
+    const rollback = ghist.length;
+    ghist.push({ role: "user", parts: [{ text }] });
+    try {
+      for (let round = 0; round < 6; round++){
+        let r;
+        try {
+          r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(cfg.brain)}:generateContent`, {
+            method: "POST",
+            headers: { "content-type": "application/json", "x-goog-api-key": cfg.geminiKey },
+            body: JSON.stringify({
+              systemInstruction: { parts: [{ text: webSystemPrompt() }] },
+              contents: ghist, tools: geminiTools(),
+              generationConfig: { maxOutputTokens: 2048 },
+            }),
+          });
+        } catch { throw new Error("Gemini 서버에 연결하지 못했습니다. 인터넷 연결을 확인해 주세요."); }
+        const v = await r.json().catch(() => ({}));
+        if (!r.ok){
+          const msg = v?.error?.message || "";
+          if (r.status === 429) throw new Error("Gemini 무료 사용량을 잠시 다 썼습니다. 1분쯤 뒤에 다시 말씀해 주세요. 계속 막히면 오늘 한도를 다 쓴 것이니 SETTINGS에서 Flash-Lite로 바꿔 보세요.");
+          if (r.status === 400 && /API key/i.test(msg) || r.status === 403) throw new Error("Gemini API 키가 올바르지 않습니다. SETTINGS에서 확인해 주세요.");
+          if (r.status === 404) throw new Error(`모델 ${cfg.brain}을(를) 찾을 수 없습니다. SETTINGS에서 다른 모델을 골라 주세요.`);
+          throw new Error(`Gemini 오류 (${r.status}): ${msg}`);
+        }
+        const cand = v.candidates?.[0];
+        const parts = cand?.content?.parts || [];
+        if (!parts.length){
+          if (cand?.finishReason === "SAFETY" || v.promptFeedback?.blockReason) throw new Error("그 요청은 처리할 수 없습니다.");
+          throw new Error("Gemini가 빈 답을 보냈습니다. 다시 말씀해 주세요.");
+        }
+        // thoughtSignature 등이 붙어 있을 수 있으므로 모델 응답 parts는 손대지 않고 그대로 기록한다
+        ghist.push({ role: "model", parts });
+        const calls = parts.filter(p => p.functionCall);
+        if (calls.length){
+          const out = [];
+          for (const { functionCall: fc } of calls){
+            let response;
+            try { response = { result: String(await runWebTool(fc.name, fc.args || {})) }; }
+            catch (e) { response = { error: String(e.message || e) }; }
+            out.push({ functionResponse: fc.id ? { id: fc.id, name: fc.name, response } : { name: fc.name, response } });
+          }
+          ghist.push({ role: "user", parts: out });
+          continue;
+        }
+        return parts.filter(p => p.text && !p.thought).map(p => p.text).join("").trim();
+      }
+      throw new Error("도구 호출이 너무 길어져서 멈췄습니다.");
+    } catch (e) { ghist.length = rollback; throw e; }
+    finally { trim(); }
   }
 
   async function askAnthropic(text){
@@ -309,12 +391,12 @@ function webApi(){
             method: "POST",
             headers: { "content-type": "application/json", "x-api-key": cfg.apiKey, "anthropic-version": "2023-06-01",
                        "anthropic-dangerous-direct-browser-access": "true" },
-            body: JSON.stringify({ model: cfg.model, max_tokens: 700, system: webSystemPrompt(),
+            body: JSON.stringify({ model: cfg.brain, max_tokens: 700, system: webSystemPrompt(),
               tools: WEB_TOOLS.map(({ name, description, input_schema }) => ({ name, description, input_schema })), messages: hist }),
           });
         } catch { throw new Error("Claude 서버에 연결하지 못했습니다. 인터넷 연결을 확인해 주세요."); }
         const v = await r.json().catch(() => ({}));
-        if (!r.ok) throw new Error(r.status === 401 ? "API 키가 올바르지 않습니다. SETTINGS에서 확인해 주세요." : `Claude API 오류 (${r.status}): ${v?.error?.message || ""}`);
+        if (!r.ok) throw new Error(r.status === 401 ? "Claude API 키가 올바르지 않습니다. SETTINGS에서 확인해 주세요." : `Claude API 오류 (${r.status}): ${v?.error?.message || ""}`);
         const content = v.content || [];
         hist.push({ role: "assistant", content });
         const uses = content.filter(b => b.type === "tool_use");
@@ -351,42 +433,55 @@ function webApi(){
     }
   }
 
-  // ---- 귀: 마이크 + 브라우저 Whisper ----
-  let micStream = null, recorder = null, chunks = [], actx = null, levelTimer = null, asrPromise = null;
+  // ---- 귀: 마이크 원음(PCM)을 직접 받아 브라우저 Whisper로 ----
+  // MediaRecorder로 압축(webm/opus)한 뒤 decodeAudioData로 다시 푸는 방식은 브라우저마다
+  // "Unable to decode audio data" 오류가 잦아서, 압축 없이 샘플을 그대로 모은다.
+  const MAX_SEC = 30;
+  let micStream = null, actx = null, rec = null, asrPromise = null, asrDevice = null;
 
   function setEar(text, bad = false){ const e = $("stEar"); e.textContent = text; e.classList.toggle("bad", bad); }
 
-  function ensureWhisper(){
+  async function loadWhisper(device){
+    setEar("Whisper 준비 중");
+    const TF = await import(TRANSFORMERS_URL);
+    const files = {};
+    const asr = await TF.pipeline("automatic-speech-recognition", `onnx-community/whisper-${cfg.whisper}`, {
+      device,
+      dtype: device === "webgpu" ? { encoder_model: "fp32", decoder_model_merged: "q4" } : "q8",
+      progress_callback: (p) => {
+        if (p.status !== "progress" || !p.total) return;
+        files[p.file] = [p.loaded, p.total];
+        const [l, t] = Object.values(files).reduce((a, [x, y]) => [a[0] + x, a[1] + y], [0, 0]);
+        setEar(`Whisper 받는 중 ${Math.round(l / t * 100)}%`);
+      },
+    });
+    asrDevice = device;
+    setEar(`whisper-${cfg.whisper} · ${device === "webgpu" ? "GPU" : "CPU"}`);
+    return asr;
+  }
+
+  function ensureWhisper(forceCpu = false){
     return asrPromise ||= (async () => {
-      setEar("Whisper 준비 중");
-      const TF = await import(TRANSFORMERS_URL);
-      const gpu = !!navigator.gpu && await navigator.gpu.requestAdapter().then(a => !!a).catch(() => false);
-      const files = {};
-      const asr = await TF.pipeline("automatic-speech-recognition", `onnx-community/whisper-${cfg.whisper}`, {
-        device: gpu ? "webgpu" : "wasm",
-        dtype: gpu ? { encoder_model: "fp32", decoder_model_merged: "q4" } : "q8",
-        progress_callback: (p) => {
-          if (p.status !== "progress" || !p.total) return;
-          files[p.file] = [p.loaded, p.total];
-          const [l, t] = Object.values(files).reduce((a, [x, y]) => [a[0] + x, a[1] + y], [0, 0]);
-          setEar(`Whisper 받는 중 ${Math.round(l / t * 100)}%`);
-        },
-      });
-      setEar(`whisper-${cfg.whisper} · ${gpu ? "GPU" : "CPU"}`);
-      return asr;
+      const gpu = !forceCpu && !!navigator.gpu && await navigator.gpu.requestAdapter().then(a => !!a).catch(() => false);
+      if (gpu){
+        try { return await loadWhisper("webgpu"); }
+        catch (e) { console.warn("WebGPU Whisper 실패, CPU로 다시 시도", e); }
+      }
+      return await loadWhisper("wasm");
     })().catch((e) => {
       asrPromise = null; setEar("Whisper 실패", true);
       throw new Error("음성 인식 모델을 불러오지 못했습니다. 인터넷 연결을 확인해 주세요. (" + (e?.message || e) + ")");
     });
   }
 
-  async function to16kMono(blob){
-    const raw = await actx.decodeAudioData(await blob.arrayBuffer());
-    const len = Math.ceil(raw.duration * 16000);
-    if (!len) return new Float32Array(0);
-    const off = new OfflineAudioContext(1, len, 16000);
-    const src = off.createBufferSource(); src.buffer = raw; src.connect(off.destination); src.start();
-    return (await off.startRendering()).getChannelData(0);
+  function resample(input, from, to){
+    if (from === to) return input;
+    const ratio = from / to, n = Math.floor(input.length / ratio), out = new Float32Array(n);
+    for (let i = 0; i < n; i++){
+      const pos = i * ratio, i0 = Math.floor(pos), i1 = Math.min(i0 + 1, input.length - 1), t = pos - i0;
+      out[i] = input[i0] * (1 - t) + input[i1] * t;
+    }
+    return out;
   }
 
   function cleanText(s){
@@ -398,49 +493,61 @@ function webApi(){
   return {
     status: async () => {
       await sampleReady;
-      return { web: true, brain: cfg.apiKey ? cfg.model : claudeSample ? "claude.ai 계정" : "", sample: !!claudeSample };
+      const brain = activeKey() ? BRAINS[cfg.brain].label : claudeSample ? "claude.ai 계정" : "";
+      return { web: true, brain, sample: !!claudeSample };
     },
     startListening: async () => {
-      if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) throw new Error("이 브라우저는 마이크 녹음을 지원하지 않습니다. 입력창으로 말씀해 주세요.");
+      if (!navigator.mediaDevices?.getUserMedia) throw new Error("이 브라우저는 마이크를 지원하지 않습니다. 입력창으로 말씀해 주세요.");
       try {
         if (!micStream || !micStream.active) micStream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } });
       } catch (e) {
-        throw new Error(e?.name === "NotAllowedError" ? "마이크 권한이 없습니다. 이 화면에서는 입력창으로 말씀해 주세요." : "마이크를 찾을 수 없습니다.");
+        throw new Error(e?.name === "NotAllowedError" ? "마이크 권한이 없습니다. 주소창 왼쪽 자물쇠에서 마이크를 허용하거나 입력창으로 말씀해 주세요." : "마이크를 찾을 수 없습니다.");
       }
       actx ||= new (window.AudioContext || window.webkitAudioContext)();
       await actx.resume();
-      const an = actx.createAnalyser(); an.fftSize = 1024;
-      actx.createMediaStreamSource(micStream).connect(an);
-      const buf = new Float32Array(an.fftSize);
-      levelTimer = setInterval(() => {
-        an.getFloatTimeDomainData(buf);
-        let p = 0; for (const v of buf) p = Math.max(p, Math.abs(v));
+      const src = actx.createMediaStreamSource(micStream);
+      const proc = actx.createScriptProcessor(4096, 1, 1);
+      const mute = actx.createGain(); mute.gain.value = 0;      // 스피커로 되울리지 않게
+      const cap = actx.sampleRate * MAX_SEC;
+      rec = { src, proc, mute, chunks: [], len: 0, rate: actx.sampleRate };
+      const r = rec;
+      proc.onaudioprocess = (e) => {
+        const ch = e.inputBuffer.getChannelData(0);
+        let p = 0; for (let i = 0; i < ch.length; i++){ const a = Math.abs(ch[i]); if (a > p) p = a; }
         fire("mic-level", Math.min(1, p * 1.6));
-      }, 40);
-      chunks = [];
-      recorder = new MediaRecorder(micStream);
-      recorder.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
-      recorder.start();
+        if (r.len < cap){ r.chunks.push(new Float32Array(ch)); r.len += ch.length; }
+      };
+      src.connect(proc); proc.connect(mute); mute.connect(actx.destination);
       ensureWhisper().catch(() => {});      // 말하는 동안 모델을 미리 받아둔다
     },
     stopListening: async () => {
-      clearInterval(levelTimer); fire("mic-level", 0);
-      if (!recorder) return "";
-      const stopped = new Promise((r) => (recorder.onstop = r));
-      recorder.stop(); await stopped; recorder = null;
-      const audio = await to16kMono(new Blob(chunks, { type: chunks[0]?.type || "audio/webm" }));
+      fire("mic-level", 0);
+      if (!rec) return "";
+      const r = rec; rec = null;
+      r.proc.onaudioprocess = null;
+      try { r.src.disconnect(); r.proc.disconnect(); r.mute.disconnect(); } catch {}
+      const all = new Float32Array(r.len); let off = 0;
+      for (const c of r.chunks){ all.set(c, off); off += c.length; }
+      const audio = resample(all, r.rate, 16000);
       if (audio.length < 16000 * 0.3) return "";
-      const asr = await ensureWhisper();
-      const out = await asr(audio, { language: "korean", task: "transcribe", chunk_length_s: 30 });
-      return cleanText(out?.text);
+      const opts = { language: "korean", task: "transcribe", chunk_length_s: 30 };
+      let asr = await ensureWhisper();
+      try {
+        return cleanText((await asr(audio, opts))?.text);
+      } catch (e) {
+        if (asrDevice !== "webgpu") throw new Error("받아쓰기에 실패했습니다: " + (e?.message || e));
+        console.warn("WebGPU 받아쓰기 실패, CPU로 전환", e);
+        asrPromise = null; asr = await ensureWhisper(true);
+        return cleanText((await asr(audio, opts))?.text);
+      }
     },
     ask: async (text) => {
       await sampleReady;
-      if (cfg.apiKey) return askAnthropic(text);
+      if (activeKey()) return provider() === "gemini" ? askGemini(text) : askAnthropic(text);
       if (claudeSample) return askSample(text);
       return demo.ask(text);
     },
-    reset: async () => { hist = []; turns = []; },
+    reset: async () => { hist = []; ghist = []; turns = []; },
     resetWhisper: () => { asrPromise = null; },
   };
 }
@@ -828,7 +935,7 @@ async function refreshStatus(greet = true){
     $("settingsBtn").hidden = false;
     if (greet) showReply(s.brain
       ? "좋은 하루입니다, 주인님. Space나 마이크 버튼을 누르고 말씀하시거나, 입력창에 적어 주세요."
-      : "데모 모드입니다, 주인님. SETTINGS에 Claude API 키를 넣으면 실제로 대화할 수 있습니다.");
+      : "데모 모드입니다, 주인님. SETTINGS에 무료 Gemini API 키를 넣으면 실제로 대화할 수 있습니다.");
     return;
   }
   try{
@@ -846,9 +953,15 @@ refreshStatus();
 
 // 설정 (웹 버전 전용)
 const panel = $("settings");
+function syncKeyFields(){
+  const g = BRAINS[$("cfgModel").value]?.provider !== "claude";
+  $("keyGemini").hidden = !g; $("keyClaude").hidden = g;
+}
+$("cfgModel").addEventListener("change", syncKeyFields);
 function openSettings(){
-  $("cfgKey").value = cfg.apiKey; $("cfgModel").value = cfg.model; $("cfgWhisper").value = cfg.whisper;
-  panel.hidden = false; $("cfgKey").focus();
+  $("cfgModel").value = cfg.brain; $("cfgGeminiKey").value = cfg.geminiKey; $("cfgKey").value = cfg.apiKey; $("cfgWhisper").value = cfg.whisper;
+  syncKeyFields(); panel.hidden = false;
+  (BRAINS[cfg.brain].provider === "gemini" ? $("cfgGeminiKey") : $("cfgKey")).focus();
 }
 function closeSettings(){ panel.hidden = true; }
 $("settingsBtn").onclick = openSettings;
@@ -858,11 +971,12 @@ panel.addEventListener("keyup", (e) => e.stopPropagation());
 $("cfgForm").addEventListener("submit", (e) => {
   e.preventDefault();
   const whisperChanged = cfg.whisper !== $("cfgWhisper").value;
-  cfg.apiKey = $("cfgKey").value.trim(); cfg.model = $("cfgModel").value; cfg.whisper = $("cfgWhisper").value;
+  cfg.brain = $("cfgModel").value; cfg.geminiKey = $("cfgGeminiKey").value.trim(); cfg.apiKey = $("cfgKey").value.trim();
+  cfg.whisper = $("cfgWhisper").value;
   saveCfg();
   if (whisperChanged){ api.resetWhisper?.(); $("stEar").textContent = `whisper-${cfg.whisper} · 대기`; $("stEar").classList.remove("bad"); }
   closeSettings(); refreshStatus(false);
-  showReply(cfg.apiKey ? "설정을 저장했습니다, 주인님." : "API 키를 지웠습니다.");
+  showReply(activeKey() ? `${BRAINS[cfg.brain].label}로 연결했습니다, 주인님.` : "선택한 모델의 API 키가 비어 있습니다. 키를 넣어 주세요.", !activeKey());
 });
 
 // ======================================================================

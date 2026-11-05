@@ -113,16 +113,24 @@ fn main() {
         .or_else(|| std::env::current_dir().ok())
         .unwrap_or_default();
 
-    let env = |k: &str, d: &str| std::env::var(k).unwrap_or_else(|_| d.to_string());
+    // .env에 키만 있고 값이 비어 있으면 기본값을 쓴다
+    let env = |k: &str, d: &str| {
+        std::env::var(k)
+            .ok()
+            .filter(|v| !v.trim().is_empty())
+            .unwrap_or_else(|| d.to_string())
+    };
 
     let stt = stt::Stt::new(
         resolve(&base, &env("WHISPER_MODEL", "models/ggml-small.bin")),
         env("WHISPER_LANG", "ko"),
     );
     let toolbox = tools::Toolbox::load(&resolve(&base, &env("JARVIS_APPS", "apps.json")));
+    let provider = brain::Provider::from_env(&env("JARVIS_PROVIDER", "gemini"));
     let brain = brain::Brain::new(
-        std::env::var("ANTHROPIC_API_KEY").ok(),
-        env("JARVIS_MODEL", "claude-haiku-5-5"),
+        provider,
+        std::env::var(provider.key_var()).ok(),
+        env("JARVIS_MODEL", provider.default_model()),
         toolbox,
     );
 

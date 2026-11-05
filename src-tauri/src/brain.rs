@@ -1,18 +1,48 @@
-//! 두뇌: Claude Messages API + 도구 사용 루프.
+//! 두뇌: Gemini(무료) 또는 Claude + 도구 사용 루프.
 //! 대화 기록은 앱이 켜져 있는 동안 메모리에만 둔다.
 
 use crate::tools::{self, Toolbox};
 use anyhow::{bail, Context, Result};
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 use tauri::AppHandle;
 use tokio::sync::Mutex;
 
-const API_URL: &str = "https://api.anthropic.com/v1/messages";
+const CLAUDE_URL: &str = "https://api.anthropic.com/v1/messages";
+const GEMINI_URL: &str = "https://generativelanguage.googleapis.com/v1beta/models";
 const MAX_TOOL_ROUNDS: usize = 6;
 const MAX_HISTORY: usize = 30;
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Provider {
+    Gemini,
+    Claude,
+}
+
+impl Provider {
+    pub fn from_env(s: &str) -> Self {
+        if s.eq_ignore_ascii_case("claude") {
+            Provider::Claude
+        } else {
+            Provider::Gemini
+        }
+    }
+    pub fn key_var(self) -> &'static str {
+        match self {
+            Provider::Gemini => "GEMINI_API_KEY",
+            Provider::Claude => "ANTHROPIC_API_KEY",
+        }
+    }
+    pub fn default_model(self) -> &'static str {
+        match self {
+            Provider::Gemini => "gemini-3.5-flash-lite",
+            Provider::Claude => "claude-haiku-5-5",
+        }
+    }
+}
+
 pub struct Brain {
     client: reqwest::Client,
+    provider: Provider,
     api_key: Option<String>,
     model: String,
     history: Mutex<Vec<Value>>,
@@ -20,9 +50,15 @@ pub struct Brain {
 }
 
 impl Brain {
-    pub fn new(api_key: Option<String>, model: String, toolbox: Toolbox) -> Self {
+    pub fn new(
+        provider: Provider,
+        api_key: Option<String>,
+        model: String,
+        toolbox: Toolbox,
+    ) -> Self {
         Self {
             client: reqwest::Client::new(),
+            provider,
             api_key: api_key.filter(|k| !k.trim().is_empty()),
             model,
             history: Mutex::new(Vec::new()),
@@ -47,15 +83,25 @@ impl Brain {
     }
 
     pub async fn ask(&self, app: &AppHandle, text: String) -> Result<String> {
-        let key = self.api_key.as_deref().context(
-            "ANTHROPIC_API_KEY가 없습니다. 프로젝트 폴더의 .env 파일에 키를 넣어 주세요",
-        )?;
+        let key = self.api_key.as_deref().with_context(|| {
+            format!(
+                "{}가 없습니다. 프로젝트 폴더의 .env 파일에 키를 넣어 주세요",
+                self.provider.key_var()
+            )
+        })?;
 
         let mut hist = self.history.lock().await;
         let rollback = hist.len();
-        hist.push(json!({ "role": "user", "content": text }));
-
-        let result = self.run_loop(app, key, &mut hist).await;
+        let result = match self.provider {
+            Provider::Gemini => {
+                hist.push(json!({ "role": "user", "parts": [{ "text": text }] }));
+                self.gemini_loop(app, key, &mut hist).await
+            }
+            Provider::Claude => {
+                hist.push(json!({ "role": "user", "content": text }));
+                self.claude_loop(app, key, &mut hist).await
+            }
+        };
         if result.is_err() {
             // 실패한 턴은 기록에서 지워 다음 요청이 깨지지 않게 한다
             hist.truncate(rollback);
@@ -64,7 +110,98 @@ impl Brain {
         result
     }
 
-    async fn run_loop(&self, app: &AppHandle, key: &str, hist: &mut Vec<Value>) -> Result<String> {
+    // ---------------- Gemini ----------------
+
+    async fn gemini_loop(
+        &self,
+        app: &AppHandle,
+        key: &str,
+        hist: &mut Vec<Value>,
+    ) -> Result<String> {
+        let url = format!("{GEMINI_URL}/{}:generateContent", self.model);
+        for _ in 0..MAX_TOOL_ROUNDS {
+            let body = json!({
+                "systemInstruction": { "parts": [{ "text": system_prompt(&self.toolbox) }] },
+                "contents": hist,
+                "tools": [{ "functionDeclarations": gemini_declarations(&self.toolbox) }],
+                "generationConfig": { "maxOutputTokens": 2048 },
+            });
+
+            let resp = self
+                .client
+                .post(&url)
+                .header("x-goog-api-key", key)
+                .json(&body)
+                .send()
+                .await
+                .context("Gemini 서버에 연결하지 못했습니다. 인터넷 연결을 확인해 주세요")?;
+
+            let status = resp.status();
+            let v: Value = resp.json().await.context("Gemini 응답을 읽지 못했습니다")?;
+            if !status.is_success() {
+                let msg = v["error"]["message"].as_str().unwrap_or("알 수 없는 오류");
+                if status.as_u16() == 429 {
+                    bail!("Gemini 무료 사용량을 잠시 다 썼습니다. 1분쯤 뒤에 다시 말씀해 주세요");
+                }
+                bail!("Gemini API 오류 ({status}): {msg}");
+            }
+
+            let parts = v["candidates"][0]["content"]["parts"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default();
+            if parts.is_empty() {
+                bail!("Gemini가 빈 답을 보냈습니다. 다시 말씀해 주세요");
+            }
+            // thoughtSignature가 붙어 있을 수 있으므로 모델 parts는 그대로 기록한다
+            hist.push(json!({ "role": "model", "parts": parts.clone() }));
+
+            let calls: Vec<&Value> = parts
+                .iter()
+                .filter(|p| p.get("functionCall").is_some())
+                .collect();
+            if !calls.is_empty() {
+                let mut out = Vec::with_capacity(calls.len());
+                for p in calls {
+                    let fc = &p["functionCall"];
+                    let name = fc["name"].as_str().unwrap_or_default();
+                    let args = if fc["args"].is_object() {
+                        fc["args"].clone()
+                    } else {
+                        json!({})
+                    };
+                    let response = match tools::run(app, &self.toolbox, name, &args).await {
+                        Ok(s) => json!({ "result": s }),
+                        Err(e) => json!({ "error": format!("{e:#}") }),
+                    };
+                    let mut fr = json!({ "name": name, "response": response });
+                    if let Some(id) = fc.get("id") {
+                        fr["id"] = id.clone();
+                    }
+                    out.push(json!({ "functionResponse": fr }));
+                }
+                hist.push(json!({ "role": "user", "parts": out }));
+                continue;
+            }
+
+            let reply: String = parts
+                .iter()
+                .filter(|p| p["thought"] != true)
+                .filter_map(|p| p["text"].as_str())
+                .collect();
+            return Ok(reply.trim().to_string());
+        }
+        bail!("도구 호출이 너무 길어져서 멈췄습니다")
+    }
+
+    // ---------------- Claude ----------------
+
+    async fn claude_loop(
+        &self,
+        app: &AppHandle,
+        key: &str,
+        hist: &mut Vec<Value>,
+    ) -> Result<String> {
         for _ in 0..MAX_TOOL_ROUNDS {
             let body = json!({
                 "model": self.model,
@@ -76,7 +213,7 @@ impl Brain {
 
             let resp = self
                 .client
-                .post(API_URL)
+                .post(CLAUDE_URL)
                 .header("x-api-key", key)
                 .header("anthropic-version", "2023-06-01")
                 .json(&body)
@@ -130,11 +267,52 @@ impl Brain {
     }
 }
 
+/// Claude 형식 도구 스키마를 Gemini functionDeclarations로 바꾼다.
+/// 인자가 없는 도구는 parameters를 빼야 하고(빈 OBJECT는 거절됨), minimum/maximum은 지운다(값은 도구에서 직접 제한).
+fn gemini_declarations(tb: &Toolbox) -> Value {
+    let decls: Vec<Value> = tools::schemas(tb)
+        .as_array()
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|t| {
+            let mut d = Map::new();
+            d.insert("name".into(), t["name"].clone());
+            d.insert("description".into(), t["description"].clone());
+            let mut params = t["input_schema"].clone();
+            strip_bounds(&mut params);
+            let has_props = params["properties"]
+                .as_object()
+                .is_some_and(|p| !p.is_empty());
+            if has_props {
+                d.insert("parameters".into(), params);
+            }
+            Value::Object(d)
+        })
+        .collect();
+    Value::Array(decls)
+}
+
+fn strip_bounds(v: &mut Value) {
+    if let Some(obj) = v.as_object_mut() {
+        obj.remove("minimum");
+        obj.remove("maximum");
+        for child in obj.values_mut() {
+            strip_bounds(child);
+        }
+    } else if let Some(arr) = v.as_array_mut() {
+        arr.iter_mut().for_each(strip_bounds);
+    }
+}
+
 /// 오래된 대화를 지운다. 도구 호출/결과 쌍이 끊기지 않도록 사용자의 일반 메시지에서만 자른다.
 fn trim(hist: &mut Vec<Value>) {
+    let is_user_text = |m: &Value| {
+        m["role"] == "user" && (m["content"].is_string() || m["parts"][0]["text"].is_string())
+    };
     while hist.len() > MAX_HISTORY {
         hist.remove(0);
-        while !hist.is_empty() && !(hist[0]["role"] == "user" && hist[0]["content"].is_string()) {
+        while !hist.is_empty() && !is_user_text(&hist[0]) {
             hist.remove(0);
         }
     }
@@ -153,4 +331,20 @@ PC를 다룰 때는 반드시 도구를 쓰고, 도구가 실패하면 이유를
 현재 시각: {now}",
         apps = tb.app_names().join(", ")
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::strip_bounds;
+    use serde_json::json;
+
+    #[test]
+    fn strips_nested_bounds() {
+        let mut v = json!({"type":"object","properties":{"seconds":{"type":"integer","minimum":1,"maximum":9}}});
+        strip_bounds(&mut v);
+        assert_eq!(
+            v,
+            json!({"type":"object","properties":{"seconds":{"type":"integer"}}})
+        );
+    }
 }
