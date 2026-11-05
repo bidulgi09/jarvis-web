@@ -1,4 +1,4 @@
-//! 두뇌: Gemini(무료) 또는 Claude + 도구 사용 루프.
+//! 두뇌: Groq(무료, 기본) / Gemini / Claude + 도구 사용 루프.
 //! 대화 기록은 앱이 켜져 있는 동안 메모리에만 둔다.
 
 use crate::tools::{self, Toolbox};
@@ -8,32 +8,36 @@ use tauri::AppHandle;
 use tokio::sync::Mutex;
 
 const CLAUDE_URL: &str = "https://api.anthropic.com/v1/messages";
+const GROQ_URL: &str = "https://api.groq.com/openai/v1/chat/completions";
 const GEMINI_URL: &str = "https://generativelanguage.googleapis.com/v1beta/models";
 const MAX_TOOL_ROUNDS: usize = 6;
 const MAX_HISTORY: usize = 30;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Provider {
+    Groq,
     Gemini,
     Claude,
 }
 
 impl Provider {
     pub fn from_env(s: &str) -> Self {
-        if s.eq_ignore_ascii_case("claude") {
-            Provider::Claude
-        } else {
-            Provider::Gemini
+        match s.to_ascii_lowercase().as_str() {
+            "claude" => Provider::Claude,
+            "gemini" => Provider::Gemini,
+            _ => Provider::Groq,
         }
     }
     pub fn key_var(self) -> &'static str {
         match self {
+            Provider::Groq => "GROQ_API_KEY",
             Provider::Gemini => "GEMINI_API_KEY",
             Provider::Claude => "ANTHROPIC_API_KEY",
         }
     }
     pub fn default_model(self) -> &'static str {
         match self {
+            Provider::Groq => "openai/gpt-oss-120b",
             Provider::Gemini => "gemini-3.5-flash-lite",
             Provider::Claude => "claude-haiku-5-5",
         }
@@ -93,6 +97,10 @@ impl Brain {
         let mut hist = self.history.lock().await;
         let rollback = hist.len();
         let result = match self.provider {
+            Provider::Groq => {
+                hist.push(json!({ "role": "user", "content": text }));
+                self.groq_loop(app, key, &mut hist).await
+            }
             Provider::Gemini => {
                 hist.push(json!({ "role": "user", "parts": [{ "text": text }] }));
                 self.gemini_loop(app, key, &mut hist).await
@@ -108,6 +116,105 @@ impl Brain {
         }
         trim(&mut hist);
         result
+    }
+
+    // ---------------- Groq (OpenAI 호환) ----------------
+
+    async fn groq_loop(&self, app: &AppHandle, key: &str, hist: &mut Vec<Value>) -> Result<String> {
+        let tools: Vec<Value> = tools::schemas(&self.toolbox)
+            .as_array()
+            .cloned()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|t| {
+                json!({ "type": "function", "function": {
+                    "name": t["name"], "description": t["description"], "parameters": t["input_schema"] } })
+            })
+            .collect();
+
+        for _ in 0..MAX_TOOL_ROUNDS {
+            let mut messages =
+                vec![json!({ "role": "system", "content": system_prompt(&self.toolbox) })];
+            messages.extend(hist.iter().cloned());
+            let mut body = json!({
+                "model": self.model,
+                "messages": messages,
+                "tools": tools,
+                "tool_choice": "auto",
+                "max_completion_tokens": 2048,
+                "temperature": 0.6,
+            });
+            if self.model.starts_with("openai/gpt-oss") {
+                body["reasoning_effort"] = json!("low");
+            }
+
+            // 무료 한도(429)나 서버 바쁨(5xx)이면 잠깐 기다렸다 최대 3번까지
+            let mut attempt = 0u32;
+            let v: Value = loop {
+                let resp = self
+                    .client
+                    .post(GROQ_URL)
+                    .bearer_auth(key)
+                    .json(&body)
+                    .send()
+                    .await
+                    .context("Groq 서버에 연결하지 못했습니다. 인터넷 연결을 확인해 주세요")?;
+                let status = resp.status();
+                let v: Value = resp.json().await.context("Groq 응답을 읽지 못했습니다")?;
+                if status.is_success() {
+                    break v;
+                }
+                let msg = v["error"]["message"].as_str().unwrap_or("알 수 없는 오류");
+                let code = status.as_u16();
+                let tool_fail = code == 400 && v["error"]["code"] == "tool_use_failed";
+                if (code == 429 || code >= 500 || tool_fail) && attempt < 2 {
+                    attempt += 1;
+                    let wait = if code == 429 {
+                        2500
+                    } else {
+                        600 * attempt as u64
+                    };
+                    tokio::time::sleep(std::time::Duration::from_millis(wait)).await;
+                    continue;
+                }
+                if code == 401 {
+                    bail!("Groq API 키가 올바르지 않습니다. .env의 GROQ_API_KEY를 확인해 주세요");
+                }
+                if code == 429 {
+                    bail!("Groq 무료 한도에 걸렸습니다. 1분쯤 뒤에 다시 말씀해 주세요. 계속되면 JARVIS_MODEL을 openai/gpt-oss-20b로 바꿔 보세요");
+                }
+                bail!("Groq API 오류 ({status}): {msg}");
+            };
+
+            let m = &v["choices"][0]["message"];
+            let calls = m["tool_calls"].as_array().cloned().unwrap_or_default();
+            if !calls.is_empty() {
+                hist.push(
+                    json!({ "role": "assistant", "content": m["content"], "tool_calls": calls }),
+                );
+                for c in &calls {
+                    let name = c["function"]["name"].as_str().unwrap_or_default();
+                    let args: Value = c["function"]["arguments"]
+                        .as_str()
+                        .and_then(|a| serde_json::from_str(a).ok())
+                        .unwrap_or_else(|| json!({}));
+                    let out = match tools::run(app, &self.toolbox, name, &args).await {
+                        Ok(s) => s,
+                        Err(e) => format!("오류: {e:#}"),
+                    };
+                    hist.push(json!({ "role": "tool", "tool_call_id": c["id"], "content": out }));
+                }
+                continue;
+            }
+
+            let reply = strip_think(m["content"].as_str().unwrap_or_default());
+            if reply.is_empty() {
+                bail!("Groq가 빈 답을 보냈습니다. 다시 말씀해 주세요");
+            }
+            hist.push(json!({ "role": "assistant", "content": reply }));
+            return Ok(reply);
+        }
+        bail!("도구 호출이 너무 길어져서 멈췄습니다")
     }
 
     // ---------------- Gemini ----------------
@@ -330,6 +437,23 @@ fn strip_bounds(v: &mut Value) {
     }
 }
 
+/// Qwen3 같은 모델이 내보내는 <think>…</think> 생각 과정을 지운다.
+fn strip_think(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut rest = s;
+    while let Some(i) = rest.find("<think>") {
+        out.push_str(&rest[..i]);
+        match rest[i..].find("</think>") {
+            Some(j) => rest = &rest[i + j + "</think>".len()..],
+            None => {
+                rest = "";
+            }
+        }
+    }
+    out.push_str(rest);
+    out.trim().to_string()
+}
+
 /// 오래된 대화를 지운다. 도구 호출/결과 쌍이 끊기지 않도록 사용자의 일반 메시지에서만 자른다.
 fn trim(hist: &mut Vec<Value>) {
     let is_user_text = |m: &Value| {
@@ -360,7 +484,13 @@ PC를 다룰 때는 반드시 도구를 쓰고, 도구가 실패하면 이유를
 
 #[cfg(test)]
 mod tests {
-    use super::strip_bounds;
+    use super::{strip_bounds, strip_think};
+
+    #[test]
+    fn strips_think_tags() {
+        assert_eq!(strip_think("<think>음…</think> 네, 주인님."), "네, 주인님.");
+        assert_eq!(strip_think("안녕 <think>미완성"), "안녕");
+    }
     use serde_json::json;
 
     #[test]

@@ -126,7 +126,7 @@ fn main() {
         env("WHISPER_LANG", "ko"),
     );
     let toolbox = tools::Toolbox::load(&resolve(&base, &env("JARVIS_APPS", "apps.json")));
-    let provider = brain::Provider::from_env(&env("JARVIS_PROVIDER", "gemini"));
+    let provider = brain::Provider::from_env(&env("JARVIS_PROVIDER", "groq"));
     let brain = brain::Brain::new(
         provider,
         std::env::var(provider.key_var()).ok(),

@@ -182,23 +182,34 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--holo);outline-o
     </div>
   </div>
 </div>
-<div class="demo" id="demo" hidden>DEMO · SETTINGS에 무료 Gemini 키를 넣으면 실제로 대화합니다</div>
+<div class="demo" id="demo" hidden>DEMO · SETTINGS에 무료 Groq 키를 넣으면 실제로 대화합니다</div>
 
 <div class="settings" id="settings" hidden role="dialog" aria-modal="true" aria-labelledby="cfgTitle">
   <form class="sheet" id="cfgForm" autocomplete="off">
     <h2 id="cfgTitle">SETTINGS</h2>
     <label for="cfgModel">두뇌 모델</label>
     <select id="cfgModel">
+      <optgroup label="무료 (Groq) · 추천">
+        <option value="groq:openai/gpt-oss-120b">GPT-OSS 120B · 똑똑함 · 기본</option>
+        <option value="groq:qwen/qwen3-32b">Qwen3 32B · 한국어 자연스러움</option>
+        <option value="groq:llama-3.3-70b-versatile">Llama 3.3 70B</option>
+      </optgroup>
       <optgroup label="무료 (Google AI Studio)">
-        <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash-Lite · 무료 · 추천</option>
-        <option value="gemini-3.8-flash">Gemini 3.8 Flash · 무료 · 하루 사용량 적음</option>
+        <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash-Lite</option>
+        <option value="gemini-3.8-flash">Gemini 3.8 Flash · 하루 사용량 적음</option>
       </optgroup>
       <optgroup label="유료 (Anthropic)">
         <option value="claude-haiku-5-5">Claude Haiku 5.5</option>
         <option value="claude-sonnet-5-5">Claude Sonnet 5.5</option>
       </optgroup>
     </select>
-    <div id="keyGemini">
+    <div id="keyGroq">
+      <label for="cfgGroqKey">Groq API 키</label>
+      <input id="cfgGroqKey" type="password" placeholder="gsk_..." spellcheck="false">
+      <p class="note">카드 없이 무료: <a href="https://console.groq.com/keys" target="_blank" rel="noopener">console.groq.com/keys</a>
+        에서 GitHub나 Google로 로그인 → Create API Key. 무료 한도는 큰 모델 기준 하루 약 1,000번입니다.</p>
+    </div>
+    <div id="keyGemini" hidden>
       <label for="cfgGeminiKey">Gemini API 키</label>
       <input id="cfgGeminiKey" type="password" placeholder="AIza..." spellcheck="false">
       <p class="note">카드 등록 없이 무료로 받을 수 있습니다: <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>
@@ -210,16 +221,21 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--holo);outline-o
       <p class="note">키는 <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>에서 발급합니다.</p>
     </div>
     <p class="note">키는 이 브라우저에만 저장되고 해당 회사 서버로만 보내집니다. 공용 컴퓨터에서는 넣지 마세요.</p>
-    <label for="cfgWhisper">음성 인식 (브라우저 Whisper)</label>
+    <label for="cfgWhisper">음성 인식</label>
     <select id="cfgWhisper">
-      <option value="tiny">tiny · 약 40MB · 가장 빠름</option>
-      <option value="base">base · 약 80MB · 기본</option>
-      <option value="small">small · 약 250MB · 한국어가 더 정확함</option>
+      <optgroup label="Groq 서버 (무료, Groq 키 필요)">
+        <option value="groq">Whisper large-v3-turbo · 한국어 가장 정확 · 빠름</option>
+      </optgroup>
+      <optgroup label="내 브라우저에서 (오프라인)">
+        <option value="tiny">tiny · 약 40MB · 가장 빠름</option>
+        <option value="base">base · 약 80MB</option>
+        <option value="small">small · 약 250MB · 한국어가 더 정확함</option>
+      </optgroup>
     </select>
-    <p class="note">처음 말할 때 모델을 한 번 내려받고, 이후에는 브라우저에 저장된 것을 씁니다. 음성은 기기 밖으로 나가지 않습니다.</p>
+    <p class="note" id="whisperNote"></p>
     <label>진단</label>
     <div class="diag">
-      <button type="button" id="testGeminiBtn">두뇌 연결 테스트</button>
+      <button type="button" id="testBrainBtn">두뇌 연결 테스트</button>
       <button type="button" id="testMicBtn">마이크 3초 받아쓰기</button>
     </div>
     <pre class="diagOut" id="diagOut" hidden></pre>
@@ -261,17 +277,23 @@ const api = isApp ? {
 // ======================================================================
 const CFG_KEY = "jarvis.web";
 const BRAINS = {
+  "groq:openai/gpt-oss-120b":      { provider: "groq", model: "openai/gpt-oss-120b", small: "openai/gpt-oss-20b", label: "Groq · GPT-OSS 120B" },
+  "groq:qwen/qwen3-32b":           { provider: "groq", model: "qwen/qwen3-32b", small: "llama-3.1-8b-instant", label: "Groq · Qwen3 32B" },
+  "groq:llama-3.3-70b-versatile":  { provider: "groq", model: "llama-3.3-70b-versatile", small: "llama-3.1-8b-instant", label: "Groq · Llama 3.3 70B" },
   "gemini-3.5-flash-lite": { provider: "gemini", label: "Gemini 3.5 Flash-Lite" },
   "gemini-3.8-flash":      { provider: "gemini", label: "Gemini 3.8 Flash" },
   "claude-haiku-5-5":      { provider: "claude", label: "Claude Haiku 5.5" },
   "claude-sonnet-5-5":     { provider: "claude", label: "Claude Sonnet 5.5" },
 };
-const cfg = Object.assign({ brain: "gemini-3.5-flash-lite", geminiKey: "", apiKey: "", whisper: "base" },
+const cfg = Object.assign({ brain: "groq:openai/gpt-oss-120b", groqKey: "", geminiKey: "", apiKey: "", whisper: "base" },
   (() => { try { return JSON.parse(localStorage.getItem(CFG_KEY) || "{}"); } catch { return {}; } })());
-if (!BRAINS[cfg.brain]) cfg.brain = "gemini-3.5-flash-lite";
+if (!BRAINS[cfg.brain]) cfg.brain = "groq:openai/gpt-oss-120b";
+// 예전 설정(Gemini 기본)에서 키가 없었다면 새 기본값인 Groq로 옮긴다
+if (BRAINS[cfg.brain].provider === "gemini" && !cfg.geminiKey) cfg.brain = "groq:openai/gpt-oss-120b";
 function saveCfg(){ try { localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); } catch {} }
 const provider = () => BRAINS[cfg.brain].provider;
-const activeKey = () => provider() === "gemini" ? cfg.geminiKey : cfg.apiKey;
+const keyFor = (prov) => ({ groq: cfg.groqKey, gemini: cfg.geminiKey, claude: cfg.apiKey })[prov] || "";
+const activeKey = () => keyFor(provider());
 
 const TRANSFORMERS_URL = "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.2";
 let pendingLinks = [];
@@ -327,6 +349,7 @@ function webApi(){
   // ---- 두뇌 ----
   let hist = [];          // Anthropic 형식
   let ghist = [];         // Gemini 형식 (role: user | model, parts)
+  let ohist = [];         // Groq(OpenAI) 형식
   let turns = [];         // claude.ai sample 형식
   const SAMPLE_ERR = { not_granted: "Claude 사용이 허용되지 않았습니다. 새로고침 후 허용해 주세요.", rate_limited: "요청이 너무 많습니다. 잠시 후 다시 말씀해 주세요.",
     session_expired: "claude.ai 로그인이 만료되었습니다.", refused: "그 요청은 처리할 수 없습니다." };
@@ -334,6 +357,7 @@ function webApi(){
   function trim(){
     while (hist.length > 30){ hist.shift(); while (hist.length && !(hist[0].role === "user" && typeof hist[0].content === "string")) hist.shift(); }
     while (ghist.length > 30){ ghist.shift(); while (ghist.length && !(ghist[0].role === "user" && ghist[0].parts?.[0]?.text != null)) ghist.shift(); }
+    while (ohist.length > 30){ ohist.shift(); while (ohist.length && !(ohist[0].role === "user" && typeof ohist[0].content === "string")) ohist.shift(); }
     while (turns.length > 24){ turns.shift(); while (turns.length && turns[0].role !== "user") turns.shift(); }
   }
 
@@ -428,6 +452,132 @@ function webApi(){
       throw new Error("도구 호출이 너무 길어져서 멈췄습니다.");
     } catch (e) { ghist.length = rollback; throw e; }
     finally { trim(); }
+  }
+
+  // ---- Groq (OpenAI 호환 API) ----
+  // 무료 한도: 큰 모델은 분당 30회·하루 약 1,000회. 한도(429)나 서버 바쁨(5xx)이면 잠깐 기다렸다 다시,
+  // 그래도 안 되면 같은 계열의 작은 모델(하루 한도가 더 큼)로 넘어간다.
+  const GROQ = "https://api.groq.com/openai/v1";
+  const groqTools = () => WEB_TOOLS.map(({ name, description, input_schema }) =>
+    ({ type: "function", function: { name, description, parameters: input_schema } }));
+  let lastGroqModel = null;
+
+  async function groqChat(body, models, key = cfg.groqKey){
+    let lastErr = null;
+    for (const model of models){
+      for (let attempt = 0; attempt < 3; attempt++){
+        let r;
+        try {
+          r = await fetch(GROQ + "/chat/completions", {
+            method: "POST",
+            headers: { "content-type": "application/json", authorization: "Bearer " + key },
+            body: JSON.stringify({ ...body, model, ...(model.startsWith("openai/gpt-oss") ? { reasoning_effort: "low" } : {}) }),
+          });
+        } catch {
+          throw new Error("Groq 서버에 연결하지 못했습니다. 인터넷 연결과, 광고 차단 확장 프로그램이 api.groq.com을 막고 있지 않은지 확인해 주세요.");
+        }
+        const v = await r.json().catch(() => ({}));
+        if (r.ok){ lastGroqModel = model; return v; }
+        const msg = v?.error?.message || "", code = v?.error?.code || "";
+        console.warn(`[jarvis] Groq ${model} ${r.status} ${code}: ${msg}`);
+        if (r.status === 401) throw new Error("Groq API 키가 올바르지 않습니다. SETTINGS에서 키를 다시 확인해 주세요.");
+        if (r.status === 403) throw new Error(`Groq가 요청을 거절했습니다 (403). ${msg}`);
+        if (r.status === 400 && code === "tool_use_failed" && attempt === 0) continue;   // 모델이 도구 호출 형식을 틀렸을 때 한 번 더
+        if (r.status === 404 || (r.status === 400 && /model/i.test(msg) && /(not (found|exist)|decommission)/i.test(msg))){
+          lastErr = new Error(`모델 ${model}을(를) 쓸 수 없습니다.`); break;
+        }
+        if (r.status === 429){
+          lastErr = new Error("Groq 무료 한도에 걸렸습니다. 1분쯤 뒤에 다시 말씀해 주세요.");
+          if (attempt === 0){ await sleep(2500); continue; }
+          break;
+        }
+        if (r.status >= 500){
+          lastErr = new Error(`Groq 서버가 지금 바쁩니다 (${r.status}). 잠시 후 다시 말씀해 주세요.`);
+          if (attempt < 2){ await sleep(600 * (attempt + 1)); continue; }
+          break;
+        }
+        throw new Error(`Groq 오류 (${r.status}): ${msg}`);
+      }
+    }
+    throw lastErr || new Error("Groq가 응답하지 않습니다.");
+  }
+
+  const stripThink = (t) => String(t || "").replace(/<think>[\s\S]*?(<\/think>|$)/g, "").trim();
+
+  async function askGroq(text){
+    const b = BRAINS[cfg.brain];
+    const rollback = ohist.length;
+    ohist.push({ role: "user", content: text });
+    let models = [b.model, b.small];
+    try {
+      for (let round = 0; round < 6; round++){
+        const v = await groqChat({
+          messages: [{ role: "system", content: webSystemPrompt() }, ...ohist],
+          tools: groqTools(), tool_choice: "auto",
+          max_completion_tokens: 2048, temperature: 0.6,
+        }, models);
+        if (round === 0 && lastGroqModel !== b.model) fire("tool", { name: "fallback:" + lastGroqModel });
+        models = [lastGroqModel];
+        const m = v.choices?.[0]?.message || {};
+        const calls = m.tool_calls || [];
+        if (calls.length){
+          ohist.push({ role: "assistant", content: m.content || null, tool_calls: calls });
+          for (const c of calls){
+            let args = {}, out;
+            try { args = JSON.parse(c.function?.arguments || "{}"); } catch {}
+            try { out = String(await runWebTool(c.function?.name, args)); } catch (e) { out = "오류: " + (e.message || e); }
+            ohist.push({ role: "tool", tool_call_id: c.id, content: out });
+          }
+          continue;
+        }
+        const reply = stripThink(m.content);
+        if (!reply) throw new Error("Groq가 빈 답을 보냈습니다. 다시 말씀해 주세요.");
+        ohist.push({ role: "assistant", content: reply });
+        return reply;
+      }
+      throw new Error("도구 호출이 너무 길어져서 멈췄습니다.");
+    } catch (e) { ohist.length = rollback; throw e; }
+    finally { trim(); }
+  }
+
+  // Groq Whisper: 16kHz 원음을 WAV로 감싸서 보낸다 (압축·디코딩 없음)
+  function wav16k(f32){
+    const n = f32.length, buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
+    const str = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+    str(0, "RIFF"); v.setUint32(4, 36 + n * 2, true); str(8, "WAVE");
+    str(12, "fmt "); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, 16000, true); v.setUint32(28, 32000, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+    str(36, "data"); v.setUint32(40, n * 2, true);
+    for (let i = 0; i < n; i++){ const x = Math.max(-1, Math.min(1, f32[i])); v.setInt16(44 + i * 2, x < 0 ? x * 0x8000 : x * 0x7fff, true); }
+    return new Blob([buf], { type: "audio/wav" });
+  }
+
+  async function transcribeGroq(audio){
+    if (!cfg.groqKey) throw new Error("Groq 음성 인식을 쓰려면 SETTINGS에 Groq API 키를 넣어 주세요.");
+    for (let attempt = 0; attempt < 2; attempt++){
+      const fd = new FormData();
+      fd.append("file", wav16k(audio), "speech.wav");
+      fd.append("model", "whisper-large-v3-turbo");
+      fd.append("language", "ko");
+      fd.append("response_format", "json");
+      fd.append("prompt", "자비스, 오늘 일정 알려줘. 크롬 열어줘. 타이머 3분.");
+      let r;
+      try { r = await fetch(GROQ + "/audio/transcriptions", { method: "POST", headers: { authorization: "Bearer " + cfg.groqKey }, body: fd }); }
+      catch { throw new Error("Groq 음성 인식 서버에 연결하지 못했습니다."); }
+      const v = await r.json().catch(() => ({}));
+      if (r.ok) return v.text || "";
+      console.warn(`[jarvis] Groq STT ${r.status}: ${v?.error?.message || ""}`);
+      if (r.status === 401) throw new Error("Groq API 키가 올바르지 않습니다.");
+      if ((r.status === 429 || r.status >= 500) && attempt === 0){ await sleep(1500); continue; }
+      throw new Error(`Groq 음성 인식 오류 (${r.status}): ${v?.error?.message || ""}`);
+    }
+  }
+
+  async function testGroq(key, brainId){
+    const b = BRAINS[brainId], t0 = performance.now();
+    const v = await groqChat({ messages: [{ role: "user", content: "연결 테스트입니다. '연결 성공'이라고만 답하세요." }], max_completion_tokens: 512 },
+      [b.model, b.small], key);
+    return { model: lastGroqModel, fellBack: lastGroqModel !== b.model, ms: Math.round(performance.now() - t0), text: stripThink(v.choices?.[0]?.message?.content) };
   }
 
   // SETTINGS의 'Gemini 연결 테스트': 도구 없이 짧은 요청 하나로 키·모델·네트워크를 확인
@@ -580,7 +730,7 @@ function webApi(){
         if (r.len < cap){ r.chunks.push(new Float32Array(ch)); r.len += ch.length; }
       };
       src.connect(proc); proc.connect(mute); mute.connect(actx.destination);
-      ensureWhisper().catch(() => {});      // 말하는 동안 모델을 미리 받아둔다
+      if (cfg.whisper !== "groq") ensureWhisper().catch(() => {});      // 말하는 동안 모델을 미리 받아둔다
     },
     stopListening: async () => {
       fire("mic-level", 0);
@@ -594,6 +744,12 @@ function webApi(){
       const stats = lastStats = { heldSec: +((performance.now() - r.t0) / 1000).toFixed(2), micRate: r.rate,
         capturedSec: +(r.len / r.rate).toFixed(2), samples16k: audio.length, peak: +r.peak.toFixed(3) };
       if (audio.length < 16000 * 0.3){ stats.text = ""; stats.note = "너무 짧음"; return ""; }
+      if (cfg.whisper === "groq"){
+        const t1 = performance.now();
+        const text = cleanText(await transcribeGroq(audio));
+        Object.assign(stats, { whisper: "Groq whisper-large-v3-turbo", transcribeMs: Math.round(performance.now() - t1), text });
+        return text;
+      }
       const opts = { language: "korean", task: "transcribe", chunk_length_s: 30 };
       let asr = await ensureWhisper();
       const t1 = performance.now();
@@ -618,13 +774,14 @@ function webApi(){
       return lastStats;
     },
     testGemini,
+    testGroq,
     ask: async (text) => {
       await sampleReady;
-      if (activeKey()) return provider() === "gemini" ? askGemini(text) : askAnthropic(text);
+      if (activeKey()) return { groq: askGroq, gemini: askGemini, claude: askAnthropic }[provider()](text);
       if (claudeSample) return askSample(text);
       return demo.ask(text);
     },
-    reset: async () => { hist = []; ghist = []; turns = []; },
+    reset: async () => { hist = []; ghist = []; ohist = []; turns = []; },
     resetWhisper: () => { asrPromise = null; },
   };
   return webApiRef;
@@ -1008,12 +1165,12 @@ async function refreshStatus(greet = true){
     const s = await api.status();
     const b = $("stBrain");
     b.textContent = s.brain || "데모 (키 없음)"; b.classList.toggle("bad", !s.brain);
-    if (!$("stEar").textContent || $("stEar").textContent === "확인 중") $("stEar").textContent = `whisper-${cfg.whisper} · 대기`;
+    if (!$("stEar").textContent || $("stEar").textContent === "확인 중") $("stEar").textContent = earLabel();
     $("demo").hidden = !!s.brain;
     $("settingsBtn").hidden = false;
     if (greet) showReply(s.brain
       ? "좋은 하루입니다, 주인님. Space나 마이크 버튼을 누르고 말씀하시거나, 입력창에 적어 주세요."
-      : "데모 모드입니다, 주인님. SETTINGS에 무료 Gemini API 키를 넣으면 실제로 대화할 수 있습니다.");
+      : "데모 모드입니다, 주인님. SETTINGS에 무료 Groq API 키를 넣으면 실제로 대화할 수 있습니다.");
     return;
   }
   try{
@@ -1031,38 +1188,48 @@ refreshStatus();
 
 // 설정 (웹 버전 전용)
 const panel = $("settings");
+function earLabel(){ return cfg.whisper === "groq" ? "Groq Whisper" : `whisper-${cfg.whisper} · 대기`; }
 function syncKeyFields(){
-  const g = BRAINS[$("cfgModel").value]?.provider !== "claude";
-  $("keyGemini").hidden = !g; $("keyClaude").hidden = g;
+  const prov = BRAINS[$("cfgModel").value]?.provider, groqStt = $("cfgWhisper").value === "groq";
+  $("keyGroq").hidden = !(prov === "groq" || groqStt);
+  $("keyGemini").hidden = prov !== "gemini";
+  $("keyClaude").hidden = prov !== "claude";
+  $("whisperNote").textContent = groqStt
+    ? "말한 소리가 Groq 서버로 보내져 받아적힙니다. 무료이고 한국어가 가장 정확합니다."
+    : "처음 말할 때 모델을 한 번 내려받고, 이후에는 브라우저에 저장된 것을 씁니다. 음성은 기기 밖으로 나가지 않습니다.";
 }
 $("cfgModel").addEventListener("change", syncKeyFields);
+$("cfgWhisper").addEventListener("change", syncKeyFields);
+const formKey = (prov) => ({ groq: $("cfgGroqKey"), gemini: $("cfgGeminiKey"), claude: $("cfgKey") })[prov].value.trim();
+const keyShape = (k) => k.startsWith("gsk_") ? "Groq 형식(gsk_)" : k.startsWith("AQ.") ? "Google 새 형식(AQ.)" : k.startsWith("AIza") ? "Google 기존 형식(AIza)" : k.startsWith("sk-ant-") ? "Anthropic 형식" : "알 수 없는 형식";
 
 // 진단: 결과를 사람이 읽을 수 있게 보여준다 (키 값은 절대 출력하지 않음)
 function diag(lines, kind){ const o = $("diagOut"); o.hidden = false; o.className = "diagOut " + (kind || ""); o.textContent = lines.join("\n"); }
-$("testGeminiBtn").onclick = async () => {
-  const model = $("cfgModel").value, prov = BRAINS[model]?.provider;
-  if (prov !== "gemini"){ diag(["두뇌 연결 테스트는 Gemini 모델에서만 할 수 있습니다."], "bad"); return; }
-  const key = $("cfgGeminiKey").value.trim();
-  if (!key){ diag(["Gemini API 키 칸이 비어 있습니다."], "bad"); return; }
-  const btn = $("testGeminiBtn"); btn.disabled = true;
-  diag([`${model}에 연결하는 중…`]);
+$("testBrainBtn").onclick = async () => {
+  const brainId = $("cfgModel").value, prov = BRAINS[brainId]?.provider;
+  if (prov === "claude"){ diag(["Claude는 유료라 연결 테스트를 생략합니다. 저장 후 대화로 확인해 주세요."]); return; }
+  const key = formKey(prov);
+  if (!key){ diag([`${prov === "groq" ? "Groq" : "Gemini"} API 키 칸이 비어 있습니다.`], "bad"); return; }
+  const btn = $("testBrainBtn"); btn.disabled = true;
+  diag([`${BRAINS[brainId].label}에 연결하는 중…`]);
   try {
-    const r = await api.testGemini(key, model);
+    const r = prov === "groq" ? await api.testGroq(key, brainId) : await api.testGemini(key, brainId);
     diag([
       "✓ 연결 성공",
-      `응답한 모델: ${r.model}${r.fellBack ? `  (${model}이 바빠서 대신 응답)` : ""}`,
+      `응답한 모델: ${r.model}${r.fellBack ? "  (기본 모델이 바쁘거나 한도에 걸려 대신 응답)" : ""}`,
       `걸린 시간: ${r.ms}ms`,
       `답: ${r.text || "(빈 답)"}`,
-      `키 형식: ${key.startsWith("AQ.") ? "새 형식(AQ.)" : key.startsWith("AIza") ? "기존 형식(AIza)" : "알 수 없는 형식"}`,
+      `키 형식: ${keyShape(key)}`,
     ], "ok");
   } catch (e) {
-    diag(["✗ 연결 실패", String(e.message || e), "",
-      `키 형식: ${key.startsWith("AQ.") ? "새 형식(AQ.)" : key.startsWith("AIza") ? "기존 형식(AIza)" : "알 수 없는 형식 (AI Studio 키가 맞나요?)"}`,
-      "자세한 로그: F12 → Console에서 [jarvis] 줄"], "bad");
+    diag(["✗ 연결 실패", String(e.message || e), "", `키 형식: ${keyShape(key)}`, "자세한 로그: F12 → Console에서 [jarvis] 줄"], "bad");
   } finally { btn.disabled = false; }
 };
 $("testMicBtn").onclick = async () => {
   const btn = $("testMicBtn"); btn.disabled = true;
+  const saved = { whisper: cfg.whisper, groqKey: cfg.groqKey };
+  cfg.whisper = $("cfgWhisper").value; cfg.groqKey = $("cfgGroqKey").value.trim();   // 저장 전 폼 값으로 시험
+  if (cfg.whisper !== saved.whisper) api.resetWhisper?.();
   try {
     const st = await api.testMic(3, (n) => diag(n ? [`말해 보세요… ${n}`, "(예: \"자비스, 라면 타이머 3분 맞춰줘\")"] : ["받아적는 중… (처음이면 모델을 받느라 오래 걸립니다)"]));
     if (!st){ diag(["녹음이 되지 않았습니다."], "bad"); return; }
@@ -1076,12 +1243,15 @@ $("testMicBtn").onclick = async () => {
     ].filter(Boolean), st.text ? "ok" : "bad");
   } catch (e) {
     diag(["✗ 실패", String(e.message || e)], "bad");
-  } finally { btn.disabled = false; }
+  } finally {
+    if (cfg.whisper !== saved.whisper) api.resetWhisper?.();
+    Object.assign(cfg, saved); btn.disabled = false;
+  }
 };
 function openSettings(){
-  $("cfgModel").value = cfg.brain; $("cfgGeminiKey").value = cfg.geminiKey; $("cfgKey").value = cfg.apiKey; $("cfgWhisper").value = cfg.whisper;
+  $("cfgModel").value = cfg.brain; $("cfgGroqKey").value = cfg.groqKey; $("cfgGeminiKey").value = cfg.geminiKey; $("cfgKey").value = cfg.apiKey; $("cfgWhisper").value = cfg.whisper;
   syncKeyFields(); panel.hidden = false;
-  (BRAINS[cfg.brain].provider === "gemini" ? $("cfgGeminiKey") : $("cfgKey")).focus();
+  ({ groq: $("cfgGroqKey"), gemini: $("cfgGeminiKey"), claude: $("cfgKey") })[BRAINS[cfg.brain].provider].focus();
 }
 function closeSettings(){ panel.hidden = true; }
 $("settingsBtn").onclick = openSettings;
@@ -1091,10 +1261,10 @@ panel.addEventListener("keyup", (e) => e.stopPropagation());
 $("cfgForm").addEventListener("submit", (e) => {
   e.preventDefault();
   const whisperChanged = cfg.whisper !== $("cfgWhisper").value;
-  cfg.brain = $("cfgModel").value; cfg.geminiKey = $("cfgGeminiKey").value.trim(); cfg.apiKey = $("cfgKey").value.trim();
+  cfg.brain = $("cfgModel").value; cfg.groqKey = $("cfgGroqKey").value.trim(); cfg.geminiKey = $("cfgGeminiKey").value.trim(); cfg.apiKey = $("cfgKey").value.trim();
   cfg.whisper = $("cfgWhisper").value;
   saveCfg();
-  if (whisperChanged){ api.resetWhisper?.(); $("stEar").textContent = `whisper-${cfg.whisper} · 대기`; $("stEar").classList.remove("bad"); }
+  if (whisperChanged){ api.resetWhisper?.(); $("stEar").textContent = earLabel(); $("stEar").classList.remove("bad"); }
   closeSettings(); refreshStatus(false);
   showReply(activeKey() ? `${BRAINS[cfg.brain].label}로 연결했습니다, 주인님.` : "선택한 모델의 API 키가 비어 있습니다. 키를 넣어 주세요.", !activeKey());
 });
