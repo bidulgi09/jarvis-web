@@ -1,8 +1,30 @@
 # J.A.R.V.I.S.
 
-아이언맨 자비스를 목표로 하는 데스크톱 AI 비서. Rust(Tauri) + 로컬 Whisper 음성인식 + Claude.
+아이언맨 자비스를 목표로 하는 AI 비서. Rust(Tauri) + 로컬 Whisper 음성인식 + Claude.
+같은 화면(`ui/index.html`)이 **데스크톱 앱**과 **웹 버전** 양쪽에서 돌아갑니다.
 
 ![MK.II 홀로그램](docs/hologram.png)
+
+## 두 가지 실행 방식
+
+| | 데스크톱 앱 (Tauri) | 웹 버전 (브라우저) |
+|---|---|---|
+| 음성 인식 | whisper.cpp, Rust에서 로컬 실행 | Whisper를 브라우저에서 로컬 실행 (transformers.js, WebGPU 있으면 GPU) |
+| 두뇌 | Claude API (`.env`의 키) | Claude API (SETTINGS에 넣은 키, 이 브라우저에만 저장) |
+| PC 제어 | 앱 실행, 볼륨, 브라우저 열기 | 링크 띄우기까지만 |
+| 공통 | 홀로그램, 손 제스처, 타이머, 홀로그램 분위기 전환, 음성 출력 | |
+
+### 웹 버전 쓰기
+
+`main` 브랜치에 푸시하면 GitHub Actions가 `ui/` 폴더를 GitHub Pages로 배포합니다.
+처음 한 번만 저장소 **Settings → Pages → Source**를 **GitHub Actions**로 바꿔 주세요.
+
+1. 배포된 주소로 들어가서 우측 하단 **SETTINGS**에 Claude API 키를 넣습니다
+2. Space를 누르고 말하면 처음 한 번 Whisper 모델(base 약 80MB)을 받은 뒤 받아적습니다
+3. 키가 없으면 데모 모드로 홀로그램과 몇 가지 명령만 동작합니다
+
+로컬에서 보려면 `ui` 폴더에서 `python -m http.server`를 실행하고 `http://localhost:8000`으로 들어가면 됩니다
+(마이크와 카메라는 https 또는 localhost에서만 켜집니다).
 
 ## 구조 (MK.II)
 
@@ -84,7 +106,10 @@ cargo tauri dev --features cuda    # NVIDIA GPU로 Whisper 가속
   - ✋ 손바닥을 펴고 0.4초 유지 → 듣기 시작
   - ✊ 주먹 쥐기 → 듣기 끝, 받아적어서 보내기
   - 듣는 중에 손이 2초 넘게 화면에서 사라지면 그대로 보냄
-- 홀로그램은 마우스 방향으로, 카메라가 켜져 있으면 손 방향으로 살짝 기울어짐
+- 홀로그램은 마우스 방향으로, 카메라가 켜져 있으면 손 방향으로 기울며 따라옴
+  - 감쇠 스프링 $\ddot{x} = K(x_{target} - x) - C\dot{x}$, $K=44$, $C=8.2$ → 감쇠비 $\zeta = \frac{C}{2\sqrt{K}} \approx 0.62$라 살짝 넘쳤다 돌아오는 탄력이 있음
+  - 마우스를 빠르게 휘두르면 입자와 고리가 잠깐 더 빨리 돎
+- 궤도 고리 4개는 계속 세차 회전하고, 각자 25~33초 주기로 구체에서 퍼져 나와 생겼다가 조각나며 흩어지고 새 각도로 다시 생김
 - 예: "크롬 열어줘", "유튜브에서 로파이 찾아줘", "라면 타이머 3분", "성운 모드로 바꿔줘", "볼륨 30으로"
 
 ### 손 인식 오프라인으로 쓰기 (선택)

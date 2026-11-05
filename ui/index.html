@@ -91,6 +91,20 @@ body{background:var(--void);color:var(--ink);font-family:var(--f-body);font-size
 .cam canvas{width:176px;height:132px;border-radius:14px;border:1px solid var(--faint);background:rgba(8,8,24,.6);display:block}
 .cam .g{font-family:var(--f-mono);font-size:11px;letter-spacing:.14em;color:var(--dim);transition:color .4s var(--ease)}
 .cam .g.hot{color:var(--holo)}
+.reply .lnk{font-size:14px;color:var(--holo);text-decoration:none;border-bottom:1px solid rgba(127,243,255,.35);display:inline-block;margin-top:8px}
+.settings{position:fixed;inset:0;display:grid;place-items:center;background:rgba(4,3,12,.55);backdrop-filter:blur(6px);z-index:20;
+  padding-left:max(16px, env(safe-area-inset-left,0px));padding-right:max(16px, env(safe-area-inset-right,0px))}
+.settings[hidden]{display:none}
+.sheet{width:min(440px,100%);background:rgba(12,12,32,.88);border:1px solid var(--faint);border-radius:18px;padding:22px 22px 18px;display:flex;flex-direction:column;gap:8px;animation:rise .5s var(--ease) both}
+.sheet h2{margin:0 0 6px;font-family:var(--f-display);font-size:13px;letter-spacing:.4em;font-weight:700;color:var(--ink)}
+.sheet label{font-family:var(--f-mono);font-size:11px;letter-spacing:.12em;color:var(--dim);margin-top:8px}
+.sheet input,.sheet select{background:rgba(4,3,12,.7);border:1px solid var(--faint);color:var(--ink);font:inherit;padding:10px 12px;border-radius:10px}
+.sheet input:focus,.sheet select:focus{outline:none;border-color:rgba(127,243,255,.55)}
+.sheet .note{margin:2px 0 0;font-size:12px;line-height:1.5;color:var(--dim)}
+.sheet .note a{color:var(--holo)}
+.sheet .acts{display:flex;justify-content:flex-end;gap:10px;margin-top:14px}
+.sheet .acts button{font-family:var(--f-mono);font-size:11px;letter-spacing:.2em;padding:9px 16px;border-radius:20px;border:1px solid var(--faint);background:transparent;color:var(--dim);cursor:pointer}
+.sheet .acts .pri{border-color:rgba(127,243,255,.5);color:var(--holo)}
 .demo{position:fixed;left:50%;top:calc(14px + env(safe-area-inset-top,0px));transform:translateX(-50%);font-family:var(--f-mono);font-size:10px;letter-spacing:.2em;color:var(--warm);
   border:1px solid rgba(255,207,138,.35);padding:4px 10px;border-radius:12px;background:rgba(20,12,4,.4);pointer-events:none;white-space:nowrap}
 button:focus-visible,input:focus-visible{outline:2px solid var(--holo);outline-offset:3px}
@@ -157,10 +171,37 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--holo);outline-o
       <button type="button" id="logBtn">LOG</button>
       <button type="button" id="voiceBtn">VOICE ON</button>
       <button type="button" id="resetBtn">RESET</button>
+      <button type="button" id="settingsBtn" hidden>SETTINGS</button>
     </div>
   </div>
 </div>
-<div class="demo" id="demo" hidden>BROWSER DEMO · 두뇌와 음성인식은 데스크톱 앱에서 동작</div>
+<div class="demo" id="demo" hidden>DEMO · SETTINGS에 API 키를 넣으면 실제로 대화합니다</div>
+
+<div class="settings" id="settings" hidden role="dialog" aria-modal="true" aria-labelledby="cfgTitle">
+  <form class="sheet" id="cfgForm" autocomplete="off">
+    <h2 id="cfgTitle">SETTINGS</h2>
+    <label for="cfgKey">Claude API 키</label>
+    <input id="cfgKey" type="password" placeholder="sk-ant-..." spellcheck="false">
+    <p class="note">키는 이 브라우저에만 저장되고 Anthropic 서버로만 보내집니다. 공용 컴퓨터에서는 넣지 마세요.
+      키는 <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>에서 발급합니다.</p>
+    <label for="cfgModel">두뇌 모델</label>
+    <select id="cfgModel">
+      <option value="claude-haiku-5-5">Claude Haiku 5.5 · 빠름</option>
+      <option value="claude-sonnet-5-5">Claude Sonnet 5.5 · 똑똑함</option>
+    </select>
+    <label for="cfgWhisper">음성 인식 (브라우저 Whisper)</label>
+    <select id="cfgWhisper">
+      <option value="tiny">tiny · 약 40MB · 가장 빠름</option>
+      <option value="base">base · 약 80MB · 기본</option>
+      <option value="small">small · 약 250MB · 한국어가 더 정확함</option>
+    </select>
+    <p class="note">처음 말할 때 모델을 한 번 내려받고, 이후에는 브라우저에 저장된 것을 씁니다. 음성은 기기 밖으로 나가지 않습니다.</p>
+    <div class="acts">
+      <button type="button" id="cfgCancel">CANCEL</button>
+      <button type="submit" class="pri">SAVE</button>
+    </div>
+  </form>
+</div>
 
 <script>
 (() => {
@@ -186,7 +227,223 @@ const api = isApp ? {
   stopListening: () => T.core.invoke("stop_listening"),
   ask: (text) => T.core.invoke("ask", { text }),
   reset: () => T.core.invoke("reset"),
-} : demoApi();
+} : webApi();
+
+// ======================================================================
+//  웹 버전: 브라우저 Whisper + Claude (API 키 직접 / claude.ai 계정)
+// ======================================================================
+const CFG_KEY = "jarvis.web";
+const cfg = Object.assign({ apiKey: "", model: "claude-haiku-5-5", whisper: "base" },
+  (() => { try { return JSON.parse(localStorage.getItem(CFG_KEY) || "{}"); } catch { return {}; } })());
+function saveCfg(){ try { localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); } catch {} }
+
+const TRANSFORMERS_URL = "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.2";
+let pendingLinks = [];
+
+function webSystemPrompt(){
+  return `너는 토니 스타크의 AI 비서 J.A.R.V.I.S.다. 사용자를 '주인님'이라 부르고, 침착하고 정중하며 살짝 위트 있는 영국 집사 같은 말투의 한국어로 답한다.
+답변은 음성으로 읽히므로 보통 1~3문장으로 짧게, 마크다운·이모지·목록 기호 없이 말하듯 쓴다.
+사용자의 말은 음성 인식 결과라 오타가 있을 수 있으니 의도를 추론한다.
+지금은 웹 브라우저에서 동작 중이라 PC 프로그램 실행과 볼륨 조절은 할 수 없다. 요청받으면 데스크톱 앱에서 가능하다고 짧게 안내한다.
+현재 시각: ${new Date().toLocaleString("ko-KR")}`;
+}
+
+const WEB_TOOLS = [
+  { name: "get_datetime", description: "현재 날짜, 요일, 시각을 돌려준다.",
+    input_schema: { type: "object", properties: {} },
+    run: () => new Date().toLocaleString("ko-KR", { dateStyle: "full", timeStyle: "short" }) },
+  { name: "set_timer", description: "초 단위 타이머를 건다. 끝나면 홀로그램이 알리고 자비스가 말한다.",
+    input_schema: { type: "object", properties: { seconds: { type: "integer", minimum: 1, maximum: 86400 }, label: { type: "string" } }, required: ["seconds"] },
+    run: (i) => {
+      const secs = Math.max(1, Math.min(86400, Math.round(Number(i.seconds)) || 0));
+      if (!secs) throw new Error("seconds가 올바르지 않습니다");
+      const label = String(i.label || "타이머").slice(0, 30), id = Date.now() + Math.random();
+      fire("timer-set", { id, label, seconds: secs });
+      setTimeout(() => fire("timer-done", { id, label }), secs * 1000);
+      return `${secs}초 타이머 시작`;
+    } },
+  { name: "set_hologram", description: "홀로그램 분위기를 바꾼다. calm(기본 청록), focus(맑은 백청색), nebula(보라·자홍 성운), alert(호박색 경계).",
+    input_schema: { type: "object", properties: { mood: { type: "string", enum: ["calm", "focus", "nebula", "alert"] } }, required: ["mood"] },
+    run: (i) => { const m = String(i.mood); if (!["calm","focus","nebula","alert"].includes(m)) throw new Error("알 수 없는 분위기"); fire("hologram", m); return "홀로그램 " + m; } },
+  { name: "open_url", description: "https 주소를 새 탭으로 연다. 검색은 검색 결과 페이지 URL을 만들어 연다.",
+    input_schema: { type: "object", properties: { url: { type: "string" }, title: { type: "string" } }, required: ["url"] },
+    run: (i) => {
+      const url = String(i.url || "");
+      if (!/^https:\/\/[^\s"]+$/.test(url)) throw new Error("https로 시작하는 올바른 주소만 열 수 있습니다");
+      pendingLinks.push({ url, title: String(i.title || url).slice(0, 60) });
+      return "링크를 화면에 띄웠음";
+    } },
+];
+function runWebTool(name, input){
+  const t = WEB_TOOLS.find(x => x.name === name);
+  if (!t) throw new Error("알 수 없는 도구: " + name);
+  fire("tool", { name });
+  return t.run(input || {});
+}
+
+function webApi(){
+  const demo = demoApi();
+  let claudeSample = null;
+  const sampleReady = (window.claude?.use ? window.claude.use("sample") : Promise.resolve(null))
+    .then(s => (claudeSample = s)).catch(() => null);
+
+  // ---- 두뇌 ----
+  let hist = [];          // Anthropic API 형식
+  let turns = [];         // claude.ai sample 형식
+  const SAMPLE_ERR = { not_granted: "Claude 사용이 허용되지 않았습니다. 새로고침 후 허용해 주세요.", rate_limited: "요청이 너무 많습니다. 잠시 후 다시 말씀해 주세요.",
+    session_expired: "claude.ai 로그인이 만료되었습니다.", refused: "그 요청은 처리할 수 없습니다." };
+
+  function trim(){
+    while (hist.length > 30){ hist.shift(); while (hist.length && !(hist[0].role === "user" && typeof hist[0].content === "string")) hist.shift(); }
+    while (turns.length > 24){ turns.shift(); while (turns.length && turns[0].role !== "user") turns.shift(); }
+  }
+
+  async function askAnthropic(text){
+    const rollback = hist.length;
+    hist.push({ role: "user", content: text });
+    try {
+      for (let round = 0; round < 6; round++){
+        let r;
+        try {
+          r = await fetch("https://api.anthropic.com/v1/messages", {
+            method: "POST",
+            headers: { "content-type": "application/json", "x-api-key": cfg.apiKey, "anthropic-version": "2023-06-01",
+                       "anthropic-dangerous-direct-browser-access": "true" },
+            body: JSON.stringify({ model: cfg.model, max_tokens: 700, system: webSystemPrompt(),
+              tools: WEB_TOOLS.map(({ name, description, input_schema }) => ({ name, description, input_schema })), messages: hist }),
+          });
+        } catch { throw new Error("Claude 서버에 연결하지 못했습니다. 인터넷 연결을 확인해 주세요."); }
+        const v = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(r.status === 401 ? "API 키가 올바르지 않습니다. SETTINGS에서 확인해 주세요." : `Claude API 오류 (${r.status}): ${v?.error?.message || ""}`);
+        const content = v.content || [];
+        hist.push({ role: "assistant", content });
+        const uses = content.filter(b => b.type === "tool_use");
+        if (v.stop_reason === "tool_use" && uses.length){
+          const results = [];
+          for (const u of uses){
+            let out, is_error = false;
+            try { out = String(await runWebTool(u.name, u.input)); } catch (e) { out = String(e.message || e); is_error = true; }
+            results.push({ type: "tool_result", tool_use_id: u.id, content: out, is_error });
+          }
+          hist.push({ role: "user", content: results });
+          continue;
+        }
+        return content.filter(b => b.type === "text").map(b => b.text).join("\n").trim();
+      }
+      throw new Error("도구 호출이 너무 길어져서 멈췄습니다.");
+    } catch (e) { hist.length = rollback; throw e; }
+    finally { trim(); }
+  }
+
+  async function askSample(text){
+    turns.push({ role: "user", content: text });
+    const opts = {};
+    const lim = await claudeSample.limits().catch(() => null);
+    if (lim?.tools) opts.tools = WEB_TOOLS.map(t => ({ name: t.name, description: t.description, inputSchema: t.input_schema, execute: (i) => runWebTool(t.name, i) }));
+    else opts.cache = false;
+    try {
+      const { text: reply } = await claudeSample([{ role: "user", content: webSystemPrompt() }, ...turns], opts);
+      turns.push({ role: "assistant", content: reply }); trim();
+      return reply;
+    } catch (e) {
+      turns.pop();
+      throw new Error(SAMPLE_ERR[e?.code] || "연결이 잠시 끊겼습니다. 다시 말씀해 주세요.");
+    }
+  }
+
+  // ---- 귀: 마이크 + 브라우저 Whisper ----
+  let micStream = null, recorder = null, chunks = [], actx = null, levelTimer = null, asrPromise = null;
+
+  function setEar(text, bad = false){ const e = $("stEar"); e.textContent = text; e.classList.toggle("bad", bad); }
+
+  function ensureWhisper(){
+    return asrPromise ||= (async () => {
+      setEar("Whisper 준비 중");
+      const TF = await import(TRANSFORMERS_URL);
+      const gpu = !!navigator.gpu && await navigator.gpu.requestAdapter().then(a => !!a).catch(() => false);
+      const files = {};
+      const asr = await TF.pipeline("automatic-speech-recognition", `onnx-community/whisper-${cfg.whisper}`, {
+        device: gpu ? "webgpu" : "wasm",
+        dtype: gpu ? { encoder_model: "fp32", decoder_model_merged: "q4" } : "q8",
+        progress_callback: (p) => {
+          if (p.status !== "progress" || !p.total) return;
+          files[p.file] = [p.loaded, p.total];
+          const [l, t] = Object.values(files).reduce((a, [x, y]) => [a[0] + x, a[1] + y], [0, 0]);
+          setEar(`Whisper 받는 중 ${Math.round(l / t * 100)}%`);
+        },
+      });
+      setEar(`whisper-${cfg.whisper} · ${gpu ? "GPU" : "CPU"}`);
+      return asr;
+    })().catch((e) => {
+      asrPromise = null; setEar("Whisper 실패", true);
+      throw new Error("음성 인식 모델을 불러오지 못했습니다. 인터넷 연결을 확인해 주세요. (" + (e?.message || e) + ")");
+    });
+  }
+
+  async function to16kMono(blob){
+    const raw = await actx.decodeAudioData(await blob.arrayBuffer());
+    const len = Math.ceil(raw.duration * 16000);
+    if (!len) return new Float32Array(0);
+    const off = new OfflineAudioContext(1, len, 16000);
+    const src = off.createBufferSource(); src.buffer = raw; src.connect(off.destination); src.start();
+    return (await off.startRendering()).getChannelData(0);
+  }
+
+  function cleanText(s){
+    const t = String(s || "").trim();
+    if (/^\[?(BLANK_AUDIO|음악|Music)\]?$|시청해\s?주셔서|구독과 좋아요/i.test(t) && t.length < 30) return "";
+    return t;
+  }
+
+  return {
+    status: async () => {
+      await sampleReady;
+      return { web: true, brain: cfg.apiKey ? cfg.model : claudeSample ? "claude.ai 계정" : "", sample: !!claudeSample };
+    },
+    startListening: async () => {
+      if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) throw new Error("이 브라우저는 마이크 녹음을 지원하지 않습니다. 입력창으로 말씀해 주세요.");
+      try {
+        if (!micStream || !micStream.active) micStream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } });
+      } catch (e) {
+        throw new Error(e?.name === "NotAllowedError" ? "마이크 권한이 없습니다. 이 화면에서는 입력창으로 말씀해 주세요." : "마이크를 찾을 수 없습니다.");
+      }
+      actx ||= new (window.AudioContext || window.webkitAudioContext)();
+      await actx.resume();
+      const an = actx.createAnalyser(); an.fftSize = 1024;
+      actx.createMediaStreamSource(micStream).connect(an);
+      const buf = new Float32Array(an.fftSize);
+      levelTimer = setInterval(() => {
+        an.getFloatTimeDomainData(buf);
+        let p = 0; for (const v of buf) p = Math.max(p, Math.abs(v));
+        fire("mic-level", Math.min(1, p * 1.6));
+      }, 40);
+      chunks = [];
+      recorder = new MediaRecorder(micStream);
+      recorder.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+      recorder.start();
+      ensureWhisper().catch(() => {});      // 말하는 동안 모델을 미리 받아둔다
+    },
+    stopListening: async () => {
+      clearInterval(levelTimer); fire("mic-level", 0);
+      if (!recorder) return "";
+      const stopped = new Promise((r) => (recorder.onstop = r));
+      recorder.stop(); await stopped; recorder = null;
+      const audio = await to16kMono(new Blob(chunks, { type: chunks[0]?.type || "audio/webm" }));
+      if (audio.length < 16000 * 0.3) return "";
+      const asr = await ensureWhisper();
+      const out = await asr(audio, { language: "korean", task: "transcribe", chunk_length_s: 30 });
+      return cleanText(out?.text);
+    },
+    ask: async (text) => {
+      await sampleReady;
+      if (cfg.apiKey) return askAnthropic(text);
+      if (claudeSample) return askSample(text);
+      return demo.ask(text);
+    },
+    reset: async () => { hist = []; turns = []; },
+    resetWhisper: () => { asrPromise = null; },
+  };
+}
 
 function demoApi(){
   let micTimer = null, t0 = 0;
@@ -305,9 +562,14 @@ async function ask(text){
   $("heard").textContent = "“" + text + "”";
   logLine("u", "YOU", text);
   setMode("thinking");
+  pendingLinks = [];
   try{
     const reply = await api.ask(text);
     showReply(reply); logLine("j", "J.A.R.V.I.S.", reply);
+    for (const l of pendingLinks){
+      const a = document.createElement("a"); a.className = "lnk"; a.href = l.url; a.target = "_blank"; a.rel = "noopener";
+      a.textContent = "↗ " + l.title; $("reply").append(document.createElement("br"), a);
+    }
     speak(reply);
   }catch(e){
     showReply(String(e), true); logLine("tool", "", "오류: " + e); setMode("idle");
@@ -354,7 +616,7 @@ addEventListener("blur", () => pttUp("key"));
 // ======================================================================
 //  시선(마우스/손) → 홀로그램 시차
 // ======================================================================
-const look = { x: 0, y: 0, tx: 0, ty: 0 };      // -1..1, 위쪽이 +y
+const look = { x: 0, y: 0, tx: 0, ty: 0, vx: 0, vy: 0 };      // -1..1, 위쪽이 +y
 let handLook = null;                           // 손이 보이면 손 위치가 마우스보다 우선
 addEventListener("pointermove", (e) => {
   look.tx = (e.clientX / innerWidth) * 2 - 1;
@@ -503,7 +765,7 @@ function drawCam(lm){
 }
 let holoRGB = [0.47, 0.95, 1.0];   // 렌더러가 매 프레임 현재 홀로그램 색으로 갱신
 (function handLoop(now){ handTick(now || 0); requestAnimationFrame(handLoop); })();
-try { if (localStorage.getItem("jarvis.hand") === "on" && isApp) startHand(); } catch {}
+try { if (localStorage.getItem("jarvis.hand") === "on") startHand(); } catch {}
 
 // ======================================================================
 //  백엔드 이벤트
@@ -556,11 +818,17 @@ function tick(){
 setInterval(tick, 250); tick();
 
 // 상태 표시
-(async () => {
+async function refreshStatus(greet = true){
   if (!isApp){
-    $("demo").hidden = false;
-    $("stBrain").textContent = "데모"; $("stEar").textContent = "데모";
-    showReply("좋은 하루입니다, 주인님. 마이크 버튼을 누르고 있거나 '성운 모드로 바꿔줘'라고 입력해 보세요.");
+    const s = await api.status();
+    const b = $("stBrain");
+    b.textContent = s.brain || "데모 (키 없음)"; b.classList.toggle("bad", !s.brain);
+    if (!$("stEar").textContent || $("stEar").textContent === "확인 중") $("stEar").textContent = `whisper-${cfg.whisper} · 대기`;
+    $("demo").hidden = !!s.brain;
+    $("settingsBtn").hidden = false;
+    if (greet) showReply(s.brain
+      ? "좋은 하루입니다, 주인님. Space나 마이크 버튼을 누르고 말씀하시거나, 입력창에 적어 주세요."
+      : "데모 모드입니다, 주인님. SETTINGS에 Claude API 키를 넣으면 실제로 대화할 수 있습니다.");
     return;
   }
   try{
@@ -573,7 +841,29 @@ setInterval(tick, 250); tick();
       : "모든 시스템 정상 가동 중입니다, 주인님. Space를 누르고 말씀하세요.";
     showReply(greet);
   }catch(err){ showReply(String(err), true); }
-})();
+}
+refreshStatus();
+
+// 설정 (웹 버전 전용)
+const panel = $("settings");
+function openSettings(){
+  $("cfgKey").value = cfg.apiKey; $("cfgModel").value = cfg.model; $("cfgWhisper").value = cfg.whisper;
+  panel.hidden = false; $("cfgKey").focus();
+}
+function closeSettings(){ panel.hidden = true; }
+$("settingsBtn").onclick = openSettings;
+$("cfgCancel").onclick = closeSettings;
+panel.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSettings(); e.stopPropagation(); });
+panel.addEventListener("keyup", (e) => e.stopPropagation());
+$("cfgForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const whisperChanged = cfg.whisper !== $("cfgWhisper").value;
+  cfg.apiKey = $("cfgKey").value.trim(); cfg.model = $("cfgModel").value; cfg.whisper = $("cfgWhisper").value;
+  saveCfg();
+  if (whisperChanged){ api.resetWhisper?.(); $("stEar").textContent = `whisper-${cfg.whisper} · 대기`; $("stEar").classList.remove("bad"); }
+  closeSettings(); refreshStatus(false);
+  showReply(cfg.apiKey ? "설정을 저장했습니다, 주인님." : "API 키를 지웠습니다.");
+});
 
 // ======================================================================
 //  홀로그램 렌더러 (WebGL2)
@@ -616,7 +906,7 @@ vec3 stars(vec2 uv, float t){
   for (int L = 0; L < 3; L++){
     float fl = float(L), s = 38. + fl*52.;
     // 가까운 별 층일수록 시선 반대쪽으로 더 많이 움직여 깊이감이 생긴다
-    vec2 g = (uv - uLook*(.006 + .012*fl))*s + vec2(fl*17.3 + t*0.006*(fl + 1.)*s, fl*5.1);
+    vec2 g = (uv - uLook*(.012 + .026*fl))*s + vec2(fl*17.3 + t*0.006*(fl + 1.)*s, fl*5.1);
     vec2 id = floor(g), f = fract(g) - .5;
     float h = hash(id + fl*7.1);
     if (h > .93){
@@ -643,7 +933,7 @@ void main(){
   vec2 bg = uv - lens*uRadius;
 
   // 성운: 도메인 워핑 fbm
-  vec2 q = (bg - uLook*.02)*1.55 + vec2(t*.010, -t*.007);
+  vec2 q = (bg - uLook*.05)*1.55 + vec2(t*.010, -t*.007);
   float w1 = fbm(q + 1.5*fbm(q*1.3 + vec2(t*.018, 0.)));
   float w2 = fbm(q*2.2 - vec2(t*.013, -t*.004) + 3.7);
   float w3 = fbm(q*.6 + 11.);
@@ -662,9 +952,9 @@ void main(){
   if (r < 1.){
     float z = sqrt(1. - r*r);
     vec3 n = vec3(p, z);
-    float tl = .42 - uLook.y*.3, ct = cos(tl), st = sin(tl);
+    float tl = .42 - uLook.y*.6, ct = cos(tl), st = sin(tl);
     n = vec3(n.x, ct*n.y - st*n.z, st*n.y + ct*n.z);
-    float sp = t*.16*(.55 + uEnergy) - uLook.x*.45;
+    float sp = t*.16*(.55 + uEnergy) - uLook.x*.95;
     float cy = cos(sp), sy = sin(sp);
     n = vec3(cy*n.x + sy*n.z, n.y, -sy*n.x + cy*n.z);
     float lat = asin(clamp(n.y, -1., 1.));
@@ -683,30 +973,41 @@ void main(){
     col = col*(.42 + .45*r) + holo;
   }
 
-  // 궤도 링 + 그 위를 도는 빛 구슬
-  for (int i = 0; i < 3; i++){
+  // 궤도 링: 끊임없이 세차 회전하고, 각자의 수명 주기마다 구체에서 퍼져 나와 생겼다가
+  // 조각나며 바깥으로 흩어져 사라진 뒤, 새 각도로 다시 태어난다
+  for (int i = 0; i < 4; i++){
     float fi = float(i);
-    float R = 1.38 + fi*.34;
-    float inc = 1.16 + fi*.11 - uLook.y*(.10 + .04*fi);
-    float phi = .32 - fi*.58 + sin(t*.045 + fi*1.7)*.09 + uLook.x*(.10 + .03*fi);
+    float cyc = t*(.030 + .011*fi) + fi*.31;           // 고리마다 다른 주기 (약 25~33초)
+    float id = floor(cyc), life = fract(cyc);
+    float vis = smoothstep(0., .16, life)*(1. - smoothstep(.70, .96, life));
+    if (vis < .002) continue;
+    float h1 = hash(vec2(id, fi*3.7)), h2 = hash(vec2(fi*1.9, id + 5.3));
+    float grow = smoothstep(0., .24, life);
+    float drift = smoothstep(.62, 1., life);
+    float R = mix(1.04, 1.30 + fi*.25 + h1*.12, grow) + drift*.38;
+    float dir = mod(fi, 2.) < .5 ? 1. : -1.;
+    float inc = .95 + h2*.55 + .12*sin(t*.11 + fi) - uLook.y*(.30 + .06*fi);
+    float phi = h1*6.283 + t*(.07 + .035*fi)*dir + uLook.x*(.34 + .08*fi);
     float c = cos(phi), s = sin(phi);
     vec2 qq = vec2(c*p.x + s*p.y, -s*p.x + c*p.y);
-    float ci = cos(inc);
+    float ci = max(cos(inc), .06);
     vec2 e = vec2(qq.x, qq.y/ci);
     float le = length(e);
     float d = abs(le - R)*ci*(1. + .6*abs(qq.y)/max(le, .001));
-    float th = .008 + .003*fi;
+    float th = .007 + .003*fi;
     float ring = exp(-pow(d/th, 2.));
     float glow = exp(-d*16.)*.16;
     float occl = (e.y > 0. && r < 1.) ? .22 : 1.;
     float ang = atan(e.y, e.x);
-    float dir = mod(fi, 2.) < .5 ? 1. : -1.;
+    // 생겨날 때와 사라질 때 고리가 조각나 보이도록 각도 방향 노이즈로 마스크
+    float frag = noise(vec2(cos(ang), sin(ang))*2.4 + vec2(fi*7.1, id*3.1 + t*.12));
+    float mask = smoothstep(1. - vis - .07, 1. - vis + .07, frag*.9 + .1);
     float a0 = t*(.22 + .1*fi)*(.55 + 1.3*uEnergy)*dir + fi*2.1;
     float da = mod(dir*(ang - a0) + 3.14159, 6.28318) - 3.14159;
-    float bead = exp(-da*da*55.)*exp(-pow(d/.028, 2.));
+    float bead = exp(-da*da*55.)*exp(-pow(d/.028, 2.))*smoothstep(.4, .9, vis);
     float tail = (da < 0. ? exp(da*2.2) : exp(-da*40.))*exp(-pow(d/.014, 2.));
-    vec3 rc = mix(uColA, uColC, fi*.33);
-    col += rc*((ring*.5 + glow)*(.4 + .6*uEnergy) + bead*1.5 + tail*.45)*occl;
+    vec3 rc = mix(uColA, uColC, fi*.28);
+    col += rc*((ring*.5 + glow)*(.4 + .6*uEnergy)*mask + bead*1.5 + tail*.45*mask)*occl*vis;
   }
 
   col += (hash(fc + fract(t)*100.) - .5)*.010;
@@ -725,9 +1026,9 @@ void main(){
   float a = aP.y + uTime*(.85/pow(rr, 1.5))*(.3 + .9*uEnergy);
   float br = 1. + .035*sin(uTime*.7 + aP.w*6.283) + uLevel*.10*aP.w;
   vec3 pos = vec3(cos(a)*rr*br, aP.z, sin(a)*rr*br);
-  float tl = 1.22 - uLook.y*.22, c = cos(tl), s = sin(tl);
+  float tl = 1.22 - uLook.y*.5, c = cos(tl), s = sin(tl);
   pos = vec3(pos.x, c*pos.y - s*pos.z, s*pos.y + c*pos.z);
-  float ph = -.22 + uLook.x*.14, cp = cos(ph), sp = sin(ph);
+  float ph = -.22 + uLook.x*.32, cp = cos(ph), sp = sin(ph);
   pos.xy = vec2(cp*pos.x - sp*pos.y, sp*pos.x + cp*pos.y);
   float persp = 1./(1. + pos.z*.16);
   vec2 scr = uCenter + pos.xy*persp*uRadius*uRes.y;
@@ -818,20 +1119,25 @@ function frame(now){
 
   // 시선: 손이 보이면 손, 아니면 마우스. 느린 지수 감쇠라 따라오되 미끄러지듯 움직인다
   const src = handLook || { x: look.tx, y: look.ty };
-  const lookGain = reduce ? .35 : 1;
-  look.x = ease(look.x, Math.max(-1, Math.min(1, src.x))*lookGain, 2.4, dt);
-  look.y = ease(look.y, Math.max(-1, Math.min(1, src.y))*lookGain, 2.4, dt);
+  // 감쇠 스프링: ζ = C / (2√K) ≈ 0.62 → 빠르게 따라가서 살짝 넘쳤다가 돌아오는 탄력
+  const lookGain = reduce ? .35 : 1, K = reduce ? 12 : 44, C = reduce ? 7 : 8.2;
+  const tx = Math.max(-1, Math.min(1, src.x))*lookGain, ty = Math.max(-1, Math.min(1, src.y))*lookGain;
+  look.vx += (K*(tx - look.x) - C*look.vx)*dt; look.x += look.vx*dt;
+  look.vy += (K*(ty - look.y) - C*look.vy)*dt; look.y += look.vy*dt;
+  const lookSpeed = Math.hypot(look.vx, look.vy);
+  // 마우스를 빠르게 휘두르면 입자와 고리가 잠깐 더 빨리 돈다
+  S.stir = ease(S.stir || 0, Math.min(.35, lookSpeed*.09), 5, dt);
 
   const narrow = W/H < 1;
   S.radius = ease(S.radius, narrow ? .12 : .165, 3, dt);
-  const cx = W*.5 + look.x*W*.012, cy = H*(narrow ? .58 : .56) + look.y*H*.014;
+  const cx = W*.5 + look.x*W*.045, cy = H*(narrow ? .58 : .56) + look.y*H*.05;
   document.documentElement.style.setProperty("--orb-px", Math.round(S.radius*H/dpr) + "px");
 
   gl.disable(gl.BLEND);
   gl.useProgram(sky.p); gl.bindVertexArray(skyVao);
   const su = sky.u;
   gl.uniform2f(su.uRes, W, H); gl.uniform2f(su.uCenter, cx, cy);
-  gl.uniform1f(su.uTime, clock); gl.uniform1f(su.uEnergy, S.energy); gl.uniform1f(su.uLevel, S.level);
+  gl.uniform1f(su.uTime, clock); gl.uniform1f(su.uEnergy, S.energy + S.stir); gl.uniform1f(su.uLevel, S.level);
   gl.uniform1f(su.uSpeak, S.speak); gl.uniform1f(su.uRadius, S.radius);
   gl.uniform3fv(su.uColA, S.A); gl.uniform3fv(su.uColB, S.B); gl.uniform3fv(su.uColC, S.C);
   gl.uniform2f(su.uLook, look.x, look.y);
@@ -841,7 +1147,7 @@ function frame(now){
   gl.useProgram(parts.p); gl.bindVertexArray(pVao);
   const pu = parts.u;
   gl.uniform2f(pu.uRes, W, H); gl.uniform2f(pu.uCenter, cx, cy);
-  gl.uniform1f(pu.uTime, clock); gl.uniform1f(pu.uEnergy, S.energy); gl.uniform1f(pu.uLevel, S.level);
+  gl.uniform1f(pu.uTime, clock); gl.uniform1f(pu.uEnergy, S.energy + S.stir); gl.uniform1f(pu.uLevel, S.level);
   gl.uniform1f(pu.uRadius, S.radius); gl.uniform1f(pu.uDpr, dpr);
   gl.uniform3fv(pu.uColA, S.A); gl.uniform3fv(pu.uColC, S.C);
   gl.uniform2f(pu.uLook, look.x, look.y);
