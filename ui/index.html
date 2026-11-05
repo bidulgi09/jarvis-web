@@ -78,7 +78,7 @@ body{background:var(--void);color:var(--ink);font-family:var(--f-body);font-size
 .mic[aria-pressed="true"]{background:rgba(127,243,255,.22);transform:scale(1.08);box-shadow:0 0 0 6px rgba(127,243,255,.08), 0 0 32px rgba(127,243,255,.35)}
 .field{flex:1;min-width:0;display:flex;background:var(--glass);border:1px solid var(--faint);backdrop-filter:blur(10px);border-radius:26px;transition:border-color .4s var(--ease)}
 .field:focus-within{border-color:rgba(127,243,255,.5)}
-.field input{flex:1;min-width:0;background:transparent;border:0;color:var(--ink);font:inherit;padding:14px 20px;outline:none}
+.field input{flex:1;min-width:0;background:transparent;border:0;color:var(--ink);font:inherit;padding:14px 20px 14px 8px;outline:none}
 .field input:focus-visible{outline:none}
 .field input::placeholder{color:var(--dim)}
 .send{border:0;background:transparent;color:var(--holo);font-family:var(--f-mono);font-size:11px;letter-spacing:.25em;padding:0 18px;cursor:pointer}
@@ -141,6 +141,26 @@ body.app .webOnly, body.app .webOnlyBtn{display:none}
 .memCard .acts button{font-family:var(--f-mono);font-size:11px;letter-spacing:.14em;background:transparent;border:1px solid var(--faint);border-radius:14px;color:var(--dim);padding:7px 12px;cursor:pointer}
 .memCard .acts .danger{border-color:rgba(255,122,107,.6);color:var(--danger)}
 @media (max-width:720px){ .mem{top:calc(10px + env(safe-area-inset-top,0px));bottom:calc(10px + env(safe-area-inset-bottom,0px));left:8px;right:8px} }
+.atts{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;width:min(720px, 100%)}
+.atts:empty{display:none}
+.att{display:flex;align-items:center;gap:8px;max-width:100%;padding:6px 8px 6px 10px;border-radius:14px;border:1px solid var(--faint);background:var(--glass);
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);font-size:12px;animation:rise .4s var(--ease) both}
+.att .k{font-family:var(--f-mono);font-size:10px;letter-spacing:.12em;color:var(--holo)}
+.att .n{min-width:0;max-width:26ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.att .m{font-family:var(--f-mono);font-size:10px;color:var(--dim);white-space:nowrap}
+.att.err{border-color:rgba(255,207,138,.6)} .att.err .m{color:var(--warm)}
+.att.busy .m::after{content:"";display:inline-block;width:6px;height:6px;margin-left:6px;border-radius:50%;background:var(--holo);animation:pulse 1s ease-in-out infinite}
+.att img{width:28px;height:28px;object-fit:cover;border-radius:6px}
+.att button{background:none;border:0;color:var(--dim);cursor:pointer;font-size:14px;line-height:1;padding:4px 6px}
+.att button:hover{color:var(--ink)}
+@keyframes pulse{50%{opacity:.25}}
+.clip{flex:none;border:0;background:transparent;color:var(--dim);cursor:pointer;padding:0 4px 0 16px;display:grid;place-items:center}
+.clip svg{width:20px;height:20px}
+.clip:hover{color:var(--holo)}
+.drop{position:fixed;inset:0;z-index:30;display:grid;place-items:center;background:rgba(4,3,12,.6);backdrop-filter:blur(4px);pointer-events:none;opacity:0;transition:opacity .25s var(--ease)}
+.drop div{border:1.5px dashed rgba(127,243,255,.6);border-radius:22px;padding:28px 36px;font-size:16px;color:var(--ink);text-align:center;line-height:1.6}
+.drop small{display:block;font-size:12px;color:var(--dim)}
+body.dragging .drop{opacity:1}
 .demo{position:fixed;left:50%;top:calc(14px + env(safe-area-inset-top,0px));transform:translateX(-50%);font-family:var(--f-mono);font-size:10px;letter-spacing:.2em;color:var(--warm);
   border:1px solid rgba(255,207,138,.35);padding:4px 10px;border-radius:12px;background:rgba(20,12,4,.4);pointer-events:none;white-space:nowrap}
 button:focus-visible,input:focus-visible{outline:2px solid var(--holo);outline-offset:3px}
@@ -206,11 +226,17 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--holo);outline-o
       <div class="heard" id="heard"></div>
       <div class="reply" id="reply"></div>
     </div>
+    <div class="atts" id="atts" aria-live="polite"></div>
     <form class="bar" id="form" autocomplete="off">
       <button class="mic" id="mic" type="button" aria-pressed="false" aria-label="누르고 있는 동안 말하기">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>
       </button>
       <div class="field">
+        <button class="clip" id="clip" type="button" aria-label="파일 첨부" title="파일 첨부 (끌어다 놓거나 붙여넣어도 됩니다)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 11.5l-8.2 8.2a5 5 0 0 1-7.1-7.1l8.6-8.6a3.4 3.4 0 0 1 4.8 4.8l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4l7.9-7.9"/></svg>
+        </button>
+        <input id="fileInput" type="file" multiple hidden
+          accept=".txt,.md,.csv,.tsv,.json,.log,.html,.css,.js,.ts,.py,.rs,.java,.c,.cpp,.h,.xml,.yaml,.yml,.toml,.sql,.pdf,.docx,image/*,audio/*,.m4a">
         <input id="box" type="text" placeholder="말하거나 입력하세요" aria-label="명령 입력">
         <button class="send" id="send" type="submit">SEND</button>
       </div>
@@ -247,6 +273,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--holo);outline-o
     </div>
   </div>
 </div>
+<div class="drop" aria-hidden="true"><div>여기에 놓으면 자비스에게 첨부합니다<small>문서 · PDF · Word · 코드 · 이미지 · 음성 파일</small></div></div>
 <div class="demo" id="demo" hidden>DEMO · SETTINGS에 무료 Groq 키를 넣으면 실제로 대화합니다</div>
 
 <div class="settings" id="settings" hidden role="dialog" aria-modal="true" aria-labelledby="cfgTitle">
@@ -257,7 +284,6 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--holo);outline-o
     <select id="cfgModel">
       <optgroup label="무료 (Groq) · 추천">
         <option value="groq:openai/gpt-oss-120b">GPT-OSS 120B · 똑똑함 · 기본</option>
-        <option value="groq:qwen/qwen3-32b">Qwen3 32B · 한국어 자연스러움</option>
         <option value="groq:llama-3.3-70b-versatile">Llama 3.3 70B</option>
       </optgroup>
       <optgroup label="무료 (Google AI Studio)">
@@ -363,7 +389,6 @@ const api = isApp ? {
 const CFG_KEY = "jarvis.web";
 const BRAINS = {
   "groq:openai/gpt-oss-120b":      { provider: "groq", model: "openai/gpt-oss-120b", small: "openai/gpt-oss-20b", label: "Groq · GPT-OSS 120B" },
-  "groq:qwen/qwen3-32b":           { provider: "groq", model: "qwen/qwen3-32b", small: "llama-3.1-8b-instant", label: "Groq · Qwen3 32B" },
   "groq:llama-3.3-70b-versatile":  { provider: "groq", model: "llama-3.3-70b-versatile", small: "llama-3.1-8b-instant", label: "Groq · Llama 3.3 70B" },
   "gemini-3.5-flash-lite": { provider: "gemini", label: "Gemini 3.5 Flash-Lite" },
   "gemini-3.8-flash":      { provider: "gemini", label: "Gemini 3.8 Flash" },
@@ -443,6 +468,9 @@ function webSystemPrompt(){
 let lastGestureAt = -1e9;
 for (const ev of ["pointerup", "keyup", "touchend"]) addEventListener(ev, () => { lastGestureAt = performance.now(); }, true);
 
+// 첨부한 파일의 글 내용 (이 탭이 열려 있는 동안만). 자비스는 read_file로 나눠 읽는다.
+const fileStore = new Map();
+
 const FILE_TYPES = { txt: "text/plain", md: "text/markdown", csv: "text/csv", json: "application/json", html: "text/html" };
 
 const WEB_TOOLS = [
@@ -498,6 +526,16 @@ const WEB_TOOLS = [
   { name: "recall", description: "기록에서 찾는다. query가 비면 최근 기록을 돌려준다.",
     input_schema: { type: "object", properties: { query: { type: "string" } } },
     run: (i) => { const rs = localMem.search(i.query); return rs.length ? JSON.stringify(rs.map(memSummary)) : "관련 기록 없음"; } },
+  { name: "read_file", description: "사용자가 첨부한 파일의 내용을 읽는다. start(글자 위치)부터 약 3000자를 돌려주며, more가 true면 end를 start로 넘겨 이어 읽는다. name은 첨부 목록의 이름을 그대로 쓴다.",
+    input_schema: { type: "object", properties: { name: { type: "string" }, start: { type: "integer" } }, required: ["name"] },
+    run: (i) => {
+      const want = String(i.name || "");
+      const f = fileStore.get(want) || [...fileStore.values()].find(x => x.name.includes(want) || want.includes(x.name));
+      if (!f) throw new Error(`그런 첨부 파일이 없습니다: ${want} (있는 파일: ${[...fileStore.keys()].join(", ") || "없음"})`);
+      const start = Math.max(0, Math.floor(Number(i.start) || 0));
+      const text = f.text.slice(start, start + 3000);
+      return JSON.stringify({ name: f.name, total: f.text.length, start, end: start + text.length, more: start + text.length < f.text.length, text });
+    } },
   { name: "show_memory", description: "기록 네트워크 화면을 열거나 닫는다.",
     input_schema: { type: "object", properties: { open: { type: "boolean" } }, required: ["open"] },
     run: (i) => { fire("memory-panel", !!i.open); return i.open ? "기록 화면을 열었음" : "기록 화면을 닫았음"; } },
@@ -749,6 +787,58 @@ function webApi(){
     return { model: lastGroqModel, fellBack: lastGroqModel !== b.model, ms: Math.round(performance.now() - t0), text: stripThink(v.choices?.[0]?.message?.content) };
   }
 
+  // ---- 첨부 이미지 보기: 비전 모델이 먼저 보고 글로 설명 → 두뇌가 그 설명으로 답한다 ----
+  async function describeImage(dataUrl, question){
+    const prompt = `이미지를 보고 아래 질문에 답하는 데 필요한 내용을 중심으로 한국어로 자세히 설명하라. 보이는 글자·숫자·표는 빠짐없이 그대로 옮겨 적어라.\n질문: ${question || "이 이미지에 무엇이 있는지 알려줘"}`;
+    const [meta, b64] = dataUrl.split(",");
+    const mime = (meta.match(/data:([^;]+)/) || [])[1] || "image/jpeg";
+    if (cfg.groqKey){
+      const v = await groqChat({ messages: [{ role: "user", content: [{ type: "text", text: prompt }, { type: "image_url", image_url: { url: dataUrl } }] }],
+        max_completion_tokens: 1500, temperature: 0.2 }, ["qwen/qwen3.8-27b"]);
+      return stripThink(v.choices?.[0]?.message?.content);
+    }
+    if (cfg.geminiKey){
+      const model = BRAINS[cfg.brain].provider === "gemini" ? cfg.brain : "gemini-3.5-flash-lite";
+      const v = await geminiCall({ contents: [{ role: "user", parts: [{ text: prompt }, { inlineData: { mimeType: mime, data: b64 } }] }],
+        generationConfig: { maxOutputTokens: 4096 } }, [model, ...GEMINI_FREE.filter(m => m !== model)]);
+      return (v.candidates?.[0]?.content?.parts || []).filter(p => p.text && !p.thought).map(p => p.text).join("").trim();
+    }
+    if (cfg.apiKey){
+      const r = await fetch("https://api.anthropic.com/v1/messages", { method: "POST",
+        headers: { "content-type": "application/json", "x-api-key": cfg.apiKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
+        body: JSON.stringify({ model: BRAINS[cfg.brain].provider === "claude" ? cfg.brain : "claude-haiku-5-5", max_tokens: 1500,
+          messages: [{ role: "user", content: [{ type: "image", source: { type: "base64", media_type: mime, data: b64 } }, { type: "text", text: prompt }] }] }) });
+      const v = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(`Claude 이미지 분석 오류 (${r.status}): ${v?.error?.message || ""}`);
+      return (v.content || []).filter(b => b.type === "text").map(b => b.text).join("\n").trim();
+    }
+    throw new Error("이미지를 보려면 SETTINGS에 Groq 키(무료)가 필요합니다.");
+  }
+
+  // ---- 첨부 음성 파일 받아쓰기: Groq Whisper(키가 있으면) 또는 브라우저 Whisper ----
+  async function transcribeFile(file){
+    if (cfg.groqKey){
+      if (file.size > 25 * 1024 * 1024) throw new Error("음성 파일은 25MB까지만 받아적을 수 있습니다.");
+      const fd = new FormData();
+      fd.append("file", file, file.name || "audio");
+      fd.append("model", "whisper-large-v3-turbo");
+      fd.append("language", "ko");
+      fd.append("response_format", "json");
+      const r = await fetch(GROQ + "/audio/transcriptions", { method: "POST", headers: { authorization: "Bearer " + cfg.groqKey }, body: fd });
+      const v = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(`Groq 받아쓰기 오류 (${r.status}): ${v?.error?.message || ""}`);
+      return String(v.text || "").trim();
+    }
+    actx ||= new (window.AudioContext || window.webkitAudioContext)();
+    const raw = await actx.decodeAudioData(await file.arrayBuffer());
+    const len = Math.ceil(raw.duration * 16000);
+    const off = new OfflineAudioContext(1, Math.max(1, len), 16000);
+    const src = off.createBufferSource(); src.buffer = raw; src.connect(off.destination); src.start();
+    const audio = (await off.startRendering()).getChannelData(0);
+    const asr = await ensureWhisper();
+    return String((await asr(audio, { language: "korean", task: "transcribe", chunk_length_s: 30, stride_length_s: 5 }))?.text || "").trim();
+  }
+
   // SETTINGS의 'Gemini 연결 테스트': 도구 없이 짧은 요청 하나로 키·모델·네트워크를 확인
   async function testGemini(key, model){
     const t0 = performance.now();
@@ -944,6 +1034,8 @@ function webApi(){
     },
     testGemini,
     testGroq,
+    describeImage,
+    transcribeFile,
     ask: async (text) => {
       await sampleReady;
       if (activeKey()) return { groq: askGroq, gemini: askGemini, claude: askAnthropic }[provider()](text);
@@ -1275,20 +1367,199 @@ $("voiceBtn").onclick = () => {
 };
 
 // ======================================================================
+//  파일 첨부: 클립 버튼 · 끌어다 놓기 · 붙여넣기
+//   글(텍스트·코드·CSV·PDF·Word) → 내용을 읽어 두고 미리보기만 보낸 뒤 자비스가 read_file로 나눠 읽음
+//   이미지 → 비전 모델이 먼저 보고 설명, 음성 파일 → 받아적기
+// ======================================================================
+const MAX_FILES = 5, MAX_BYTES = 25 * 1024 * 1024, PREVIEW = 1200;
+const TEXT_EXT = /\.(txt|md|markdown|csv|tsv|json|log|html?|css|js|mjs|ts|tsx|jsx|py|rs|java|kt|c|cc|cpp|h|hpp|cs|go|rb|php|swift|xml|ya?ml|toml|ini|cfg|sql|sh|bat|ps1|srt|vtt)$/i;
+const PDFJS = ["https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/", "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.8.69/build/"];
+const MAMMOTH = ["https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js", "https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js"];
+let attachments = [];          // { id, file, name, kind, label, status, text, meta, dataUrl, thumb, error }
+
+const fmtSize = (b) => b < 1024 ? b + "B" : b < 1048576 ? (b / 1024).toFixed(0) + "KB" : (b / 1048576).toFixed(1) + "MB";
+const fmtNum = (n) => n.toLocaleString("ko-KR");
+
+function kindOf(f){
+  const n = f.name.toLowerCase(), t = f.type || "";
+  if (t.startsWith("image/") && !/svg/.test(t)) return "image";
+  if (t.startsWith("audio/") || /\.(mp3|wav|m4a|ogg|oga|flac|webm|aac)$/.test(n)) return "audio";
+  if (t === "application/pdf" || n.endsWith(".pdf")) return "pdf";
+  if (n.endsWith(".docx")) return "docx";
+  if (t.startsWith("text/") || t === "application/json" || TEXT_EXT.test(n) || n.endsWith(".svg")) return "text";
+  return null;
+}
+const KIND_LABEL = { text: "글", pdf: "PDF", docx: "WORD", image: "이미지", audio: "음성" };
+
+async function loadPdfjs(){
+  for (const base of PDFJS){
+    try {
+      const lib = await import(base + "pdf.min.mjs");
+      lib.GlobalWorkerOptions.workerSrc = base + "pdf.worker.min.mjs";
+      return lib;
+    } catch (e) { console.warn("[jarvis] pdf.js 불러오기 실패", base, e); }
+  }
+  throw new Error("PDF를 읽는 도구를 불러오지 못했습니다.");
+}
+function loadScript(src){
+  return new Promise((ok, no) => { const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = () => no(new Error(src)); document.head.append(s); });
+}
+async function loadMammoth(){
+  if (window.mammoth) return window.mammoth;
+  for (const u of MAMMOTH){ try { await loadScript(u); if (window.mammoth) return window.mammoth; } catch {} }
+  throw new Error("Word 파일을 읽는 도구를 불러오지 못했습니다.");
+}
+
+// 이미지는 긴 변 1280px JPEG로 줄여서 보낸다 (전송량·토큰 절약)
+async function shrinkImage(file){
+  const bmp = await createImageBitmap(file);
+  const k = Math.min(1, 1280 / Math.max(bmp.width, bmp.height));
+  const c = document.createElement("canvas"); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+  const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height); g.drawImage(bmp, 0, 0, c.width, c.height);
+  bmp.close?.();
+  return { dataUrl: c.toDataURL("image/jpeg", 0.85), w: c.width, h: c.height };
+}
+
+async function extract(a){
+  const f = a.file;
+  if (a.kind === "text"){
+    a.text = (await f.text()).replace(/\r\n/g, "\n");
+    a.meta = `${fmtNum(a.text.length)}자`;
+  } else if (a.kind === "pdf"){
+    const lib = await loadPdfjs();
+    const doc = await lib.getDocument({ data: new Uint8Array(await f.arrayBuffer()) }).promise;
+    const pages = [];
+    for (let i = 1; i <= doc.numPages; i++){
+      const page = await doc.getPage(i);
+      const tc = await page.getTextContent();
+      pages.push(`[${i}쪽]\n` + tc.items.map(it => it.str + (it.hasEOL ? "\n" : "")).join("").replace(/[ \t]+\n/g, "\n"));
+      a.meta = `${i}/${doc.numPages}쪽 읽는 중`; renderAtts();
+    }
+    a.text = pages.join("\n\n").trim();
+    a.meta = `${doc.numPages}쪽 · ${fmtNum(a.text.length)}자`;
+    if (a.text.replace(/\[\d+쪽\]/g, "").trim().length < 20) a.meta += " · 글자 없음(스캔본?)";
+  } else if (a.kind === "docx"){
+    const m = await loadMammoth();
+    a.text = (await m.extractRawText({ arrayBuffer: await f.arrayBuffer() })).value.trim();
+    a.meta = `${fmtNum(a.text.length)}자`;
+  } else if (a.kind === "image"){
+    const { dataUrl, w, h } = await shrinkImage(f);
+    a.dataUrl = dataUrl; a.thumb = dataUrl;
+    a.meta = `${w}×${h}`;
+  } else if (a.kind === "audio"){
+    a.meta = "받아적는 중";
+    renderAtts();
+    if (!api.transcribeFile) throw new Error("데스크톱 앱에서는 아직 음성 파일을 받아적을 수 없습니다.");
+    a.text = await api.transcribeFile(f);
+    a.meta = `받아쓰기 ${fmtNum(a.text.length)}자`;
+  }
+}
+
+function renderAtts(){
+  const box = $("atts"); box.textContent = "";
+  for (const a of attachments){
+    const el = document.createElement("div");
+    el.className = "att" + (a.status === "busy" ? " busy" : a.status === "error" ? " err" : "");
+    if (a.thumb){ const im = document.createElement("img"); im.src = a.thumb; im.alt = ""; el.append(im); }
+    const k = document.createElement("span"); k.className = "k"; k.textContent = KIND_LABEL[a.kind] || "파일";
+    const n = document.createElement("span"); n.className = "n"; n.textContent = a.name; n.title = a.name;
+    const m = document.createElement("span"); m.className = "m"; m.textContent = a.status === "error" ? a.error : (a.meta || fmtSize(a.file.size));
+    const x = document.createElement("button"); x.type = "button"; x.textContent = "✕"; x.setAttribute("aria-label", a.name + " 첨부 빼기");
+    x.onclick = () => { attachments = attachments.filter(o => o !== a); renderAtts(); };
+    el.append(k, n, m, x); box.append(el);
+  }
+}
+
+function uniqueName(name){
+  if (!fileStore.has(name) && !attachments.some(a => a.name === name)) return name;
+  const dot = name.lastIndexOf("."), stem = dot > 0 ? name.slice(0, dot) : name, ext = dot > 0 ? name.slice(dot) : "";
+  for (let i = 2; ; i++){ const n = `${stem} (${i})${ext}`; if (!fileStore.has(n) && !attachments.some(a => a.name === n)) return n; }
+}
+
+function addFiles(list){
+  for (const file of list){
+    if (attachments.length >= MAX_FILES){ showReply(`한 번에 ${MAX_FILES}개까지 첨부할 수 있습니다.`, true); break; }
+    const kind = kindOf(file);
+    const a = { id: Math.random().toString(36).slice(2), file, name: uniqueName(file.name || "붙여넣은 이미지.png"), kind, status: "busy", meta: "읽는 중" };
+    if (!kind){ a.status = "error"; a.error = "지원하지 않는 형식 (엑셀은 CSV로 저장해 주세요)"; }
+    else if (file.size > MAX_BYTES){ a.status = "error"; a.error = "25MB가 넘어 읽을 수 없음"; }
+    if (kind === "image" && attachments.filter(x => x.kind === "image").length >= 3){ a.status = "error"; a.error = "이미지는 한 번에 3장까지"; }
+    attachments.push(a);
+    if (a.status === "busy"){
+      a.ready = extract(a).then(() => { a.status = "ready"; }).catch(e => { a.status = "error"; a.error = String(e.message || e).slice(0, 60); console.warn("[jarvis] 첨부 읽기 실패", a.name, e); })
+        .finally(renderAtts);
+    }
+  }
+  renderAtts();
+}
+
+// 보낼 때: 이미지 설명을 받고, 각 파일은 이름·종류·미리보기만 메시지에 붙인다
+async function buildAttachmentContext(question){
+  const items = attachments.filter(a => a.status !== "error");
+  await Promise.all(items.map(a => a.ready));
+  const ok = items.filter(a => a.status === "ready");
+  const lines = [];
+  for (const a of ok){
+    if (a.kind === "image"){
+      $("heard").textContent = `“${a.name}” 이미지를 보는 중…`;
+      try { a.text = "[이미지 설명 · 비전 모델이 본 내용]\n" + await api.describeImage(a.dataUrl, question); }
+      catch (e) { a.text = ""; a.meta = "이미지를 볼 수 없음"; lines.push(`- ${a.name} (이미지): 볼 수 없었음 — ${e.message || e}`); continue; }
+    }
+    if (!a.text){ lines.push(`- ${a.name} (${KIND_LABEL[a.kind]}): 읽을 수 있는 글자가 없음`); continue; }
+    fileStore.set(a.name, { name: a.name, kind: a.kind, text: a.text });
+    const head = a.text.slice(0, isApp ? 6000 : PREVIEW);
+    const more = a.text.length > head.length;
+    lines.push(`- ${a.name} (${KIND_LABEL[a.kind]}, ${a.meta || ""}, 전체 ${fmtNum(a.text.length)}자)\n"""\n${head}${more ? "\n…(이하 생략)" : ""}\n"""`);
+  }
+  const failed = attachments.filter(a => a.status === "error").map(a => `- ${a.name}: ${a.error}`);
+  if (!lines.length && !failed.length) return "";
+  let out = `\n\n[사용자가 첨부한 파일 ${ok.length}개]\n` + lines.join("\n");
+  if (failed.length) out += `\n[읽지 못한 파일]\n` + failed.join("\n");
+  if (!isApp && ok.some(a => a.text && a.text.length > PREVIEW)) out += `\n긴 파일은 read_file 도구로 나머지를 읽을 수 있다. 내용을 지어내지 말고 파일에 있는 것만 근거로 답하라.`;
+  return out;
+}
+
+$("clip").onclick = () => $("fileInput").click();
+$("fileInput").addEventListener("change", (e) => { addFiles([...e.target.files]); e.target.value = ""; });
+$("box").addEventListener("paste", (e) => {
+  const files = [...(e.clipboardData?.files || [])];
+  if (files.length){ e.preventDefault(); addFiles(files); }
+});
+let dragDepth = 0;
+addEventListener("dragenter", (e) => { if ([...(e.dataTransfer?.types || [])].includes("Files")){ dragDepth++; document.body.classList.add("dragging"); } });
+addEventListener("dragleave", () => { if (--dragDepth <= 0){ dragDepth = 0; document.body.classList.remove("dragging"); } });
+addEventListener("dragover", (e) => { if ([...(e.dataTransfer?.types || [])].includes("Files")) e.preventDefault(); });
+addEventListener("drop", (e) => {
+  if (!e.dataTransfer?.files?.length) return;
+  e.preventDefault(); dragDepth = 0; document.body.classList.remove("dragging");
+  addFiles([...e.dataTransfer.files]);
+});
+
+// ======================================================================
 //  대화
 // ======================================================================
 let busy = false;
 async function ask(text){
   text = (text || "").trim();
-  if (!text || busy) return;
+  const sending = attachments.slice();
+  if ((!text && !sending.length) || busy) return;
+  if (!text) text = sending.some(a => a.kind === "image") ? "첨부한 이미지를 보고 설명해줘" : "첨부한 파일을 확인하고 요약해줘";
   busy = true; $("send").disabled = true;
   stopSpeaking();
-  $("heard").textContent = "“" + text + "”";
-  logLine("u", "YOU", text);
+  const names = sending.map(a => a.name);
+  $("heard").textContent = "“" + text + "”" + (names.length ? "  ·  📎 " + names.join(", ") : "");
+  logLine("u", "YOU", text + (names.length ? "\n📎 " + names.join(", ") : ""));
   setMode("thinking");
   pendingLinks = [];
   try{
-    const reply = await api.ask(text);
+    let full = text;
+    if (sending.length){
+      $("heard").textContent = "첨부 파일을 읽는 중…";
+      full += await buildAttachmentContext(text);
+      attachments = []; renderAtts();
+      $("heard").textContent = "“" + text + "”  ·  📎 " + names.join(", ");
+    }
+    const reply = await api.ask(full);
     showReply(reply); logLine("j", "J.A.R.V.I.S.", reply);
     for (const l of pendingLinks){
       const a = document.createElement("a"); a.className = "lnk"; a.href = l.url;
@@ -1500,7 +1771,7 @@ try { if (localStorage.getItem("jarvis.hand") === "on") startHand(); } catch {}
 on("mic-level", (v) => { micLevel = Math.max(0, Math.min(1, +v || 0)); });
 on("hologram", (m) => { if (PALETTES[m]) mood = m; });
 on("tool", (p) => logLine("tool", "", "▸ " + (String(p?.name).startsWith("fallback:") ? "바쁜 모델 대신 " + p.name.slice(9) + " 사용" : (TOOL_NAMES[p?.name] || p?.name))));
-const TOOL_NAMES = { get_datetime:"시각 확인", open_app:"프로그램 실행", open_url:"브라우저 열기", set_volume:"볼륨 조절", set_timer:"타이머 설정", set_hologram:"홀로그램 전환", create_file:"파일 만들기", remember:"기록하기", recall:"기록 찾기", show_memory:"기록 화면" };
+const TOOL_NAMES = { get_datetime:"시각 확인", open_app:"프로그램 실행", open_url:"브라우저 열기", set_volume:"볼륨 조절", set_timer:"타이머 설정", set_hologram:"홀로그램 전환", create_file:"파일 만들기", read_file:"첨부 파일 읽기", remember:"기록하기", recall:"기록 찾기", show_memory:"기록 화면" };
 
 const timers = new Map();
 on("timer-set", ({id, label, seconds}) => {
