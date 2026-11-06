@@ -291,6 +291,12 @@ body.dragging .drop{opacity:1}
 button:focus-visible,input:focus-visible{outline:2px solid var(--holo);outline-offset:3px}
 
 @keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+/* 호출어 */
+.woke::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:11;background:radial-gradient(circle at 50% 44%,rgba(127,243,255,.22),transparent 55%);animation:woke .9s ease-out both}
+@keyframes woke{0%{opacity:0}20%{opacity:1}100%{opacity:0}}
+.wakeOn #wakeBtn{color:var(--holo)}
+.sheet .chk{display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13px;color:var(--ink)}
+.sheet .chk input{width:auto;accent-color:var(--holo)}
 /* 자폭 */
 .sd{position:fixed;z-index:13;left:50%;top:50%;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:14px;pointer-events:none;text-align:center}
 .sd[hidden]{display:none}
@@ -390,6 +396,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--holo);outline-o
       <span>목소리</span><b id="stVoice">브라우저</b>
       <span>손 인식</span><b id="stHand">꺼짐</b>
       <span>날씨</span><b id="stWx">—</b>
+      <span>호출어</span><b id="stWake">꺼짐</b>
     </div>
   </div>
 
@@ -448,6 +455,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--holo);outline-o
       <button type="button" id="todoBtn">TO DO</button>
       <button type="button" id="ambBtn">AMBIENT</button>
       <button type="button" id="layoutBtn" title="패널을 끌어 옮기는 배치 모드">LAYOUT</button>
+      <button type="button" id="wakeBtn" title="&quot;자비스&quot;라고 부르면 듣기 시작">WAKE OFF</button>
       <button type="button" id="handBtn">HAND OFF</button>
       <button type="button" id="logBtn">LOG</button>
       <button type="button" id="voiceBtn">VOICE ON</button>
@@ -564,6 +572,13 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--holo);outline-o
       Redirect URI에 <code id="spRedirect"></code> <button type="button" id="spCopy" class="mini">복사</button> 를 넣고, Web API와 Web Playback SDK를 체크 → Client ID를 위에 붙여 넣기.</p>
     <label for="cfgAmb">배경음 크기</label>
     <input id="cfgAmb" type="range" min="0" max="100" step="1">
+    <label for="cfgWakeEng">호출어 인식</label>
+    <select id="cfgWakeEng">
+      <option value="auto">자동 (브라우저 음성인식이 있으면 그것, 빠름)</option>
+      <option value="whisper">내 Whisper 설정으로 (소리가 날 때만 받아적음)</option>
+    </select>
+    <p class="note">브라우저 음성인식은 크롬·엣지에서 구글 서버로 소리를 보내 받아적습니다. 원치 않으면 Whisper를 고르세요 (Groq 받아쓰기는 소리가 날 때마다 한 번씩 요청).</p>
+    <label class="chk"><input id="cfgBrief" type="checkbox"> 하루 처음 화면을 누르면 자동 브리핑</label>
     <label for="cfgTts">목소리</label>
     <select id="cfgTts">
       <optgroup label="Supertonic (무료 · 자연스러움 · 기기 안에서 생성)">
@@ -622,6 +637,7 @@ const api = isApp ? {
   status: () => T.core.invoke("status"),
   startListening: () => T.core.invoke("start_listening"),
   stopListening: () => T.core.invoke("stop_listening"),
+  transcribeClip: (pcm) => T.core.invoke("transcribe_clip", { pcm: Array.from(pcm) }),
   ask: (text) => T.core.invoke("ask", { text }),
   reset: () => T.core.invoke("reset"),
 } : webApi();
@@ -703,6 +719,8 @@ function webSystemPrompt(){
 날씨를 물으면 get_weather를 쓴다. 지역을 말하지 않았으면 place를 비운다.
 너는 화면에 스스로 UI를 만들 수 있다. 답이 표·비교·단계·일정·수치 정리처럼 구조가 있거나 사용자가 한동안 보면서 쓸 내용이면, 긴 말 대신 make_panel로 패널을 띄우고 말로는 한두 문장만 한다. 계산·단위 변환·그래프·연습 문제처럼 직접 만지면 좋은 것은 kind=html로 작은 도구를 만든다. 매번은 아니고 정말 도움이 될 때만 쓴다(가벼운 잡담·짧은 답에는 쓰지 않는다). 이미 있는 패널과 같은 주제면 같은 id로 고친다. 패널을 옮겨 달라면 arrange_panel을 쓴다.
 음악을 틀어 달라면 play_music(가수만 말하면 kind=artist, 분위기를 말하면 kind=playlist), 멈춤·다음 곡·볼륨은 music_control, 지금 나오는 곡을 물으면 now_playing을 쓴다. 곡을 틀었으면 무엇을 틀었는지 한 문장으로만 말한다. Spotify가 연결 안 되어 있으면 SETTINGS에서 연결하라고 안내한다.
+최신 정보(오늘 뉴스, 최근 일, 경기 결과, 가격, 현재 직책, 일정, 영업 여부 등)나 확실히 모르는 사실은 반드시 web_search로 찾은 뒤 답하고, 끝에 줄을 바꿔 '출처: [사이트 이름](URL)'을 1~2개 단다. 검색 결과에 없는 내용은 지어내지 않는다.
+브리핑을 원하면 briefing을 쓰고, 결과를 바탕으로 시간대에 맞는 인사 한마디와 함께 날씨·할 일·뉴스를 3~5문장으로 말한다(자세한 건 패널에 있으니 다 읽지 않는다).
 자폭하라고 하면 망설이지 말고 self_destruct를 호출하고 영화처럼 짧게 한마디 한다(예: "자폭 시퀀스 가동. 영광이었습니다, 주인님."). 취소하라면 action=cancel, 복구·재부팅하라면 action=restore.
 지금 떠 있는 패널: ${genPanels.length ? genPanels.map(p => p.title + "(id " + p.id.slice(2) + ")").join(", ") : "없음"}
 사용자의 말은 음성 인식 결과라 오타가 있을 수 있으니 의도를 추론한다.
@@ -854,6 +872,12 @@ const WEB_TOOLS = [
   { name: "now_playing", description: "지금 Spotify에서 나오는 곡 정보를 가져온다.",
     input_schema: { type: "object", properties: {} },
     run: () => spotify.nowPlaying() },
+  { name: "web_search", description: "웹을 실시간으로 검색한다. 오늘 뉴스, 최근 사건, 경기 결과, 가격·환율, 현재 직책, 출시 일정, 영업시간처럼 바뀌는 정보나 잘 모르는 것은 답하기 전에 꼭 쓴다. query는 검색어(한국어 가능).",
+    input_schema: { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
+    run: (i) => webSearch(i) },
+  { name: "briefing", description: "오늘의 브리핑: 날짜, 날씨, 할 일(마감 포함), 주요 뉴스를 모아 화면에 브리핑 패널을 띄운다. '브리핑', '오늘 뭐 있어', '아침 정리' 같은 말에 쓴다. news=false면 뉴스 생략.",
+    input_schema: { type: "object", properties: { news: { type: "boolean" } } },
+    run: (i) => briefing(i) },
   { name: "self_destruct", description: "자폭 연출: 카운트다운 뒤 홀로그램이 터지고 블랙홀이 생긴다. 화면 연출일 뿐 데이터·파일·기록은 아무것도 지우지 않는다. action=start(seconds 3~10, 기본 5), cancel(카운트다운 취소), restore(블랙홀을 닫고 홀로그램 복구).",
     input_schema: { type: "object", properties: { action: { type: "string", enum: ["start", "cancel", "restore"] }, seconds: { type: "number" } } },
     run: (i) => selfDestructTool(i) },
@@ -1354,6 +1378,12 @@ function webApi(){
       Object.assign(stats, { whisper: `whisper-${cfg.whisper} · ${asrDevice === "webgpu" ? "GPU" : "CPU"}`, transcribeMs: Math.round(performance.now() - t1), text });
       return text;
     },
+    // 호출어용 짧은 소리 조각 받아적기 (16kHz)
+    transcribeClip: async (audio) => {
+      if (cfg.whisper === "groq") return cleanText(await transcribeGroq(audio));
+      const asr = await ensureWhisper();
+      return cleanText((await asr(audio, { language: "korean", task: "transcribe", chunk_length_s: 30 }))?.text);
+    },
     // SETTINGS의 '마이크 3초 테스트'
     testMic: async (seconds, onTick) => {
       await webApiRef.startListening();
@@ -1482,7 +1512,7 @@ const MD = {
     return (this.ready = true);
   },
   // 서식이 필요한 글인지 (짧은 말은 지금처럼 단어씩 떠오르게)
-  looksRich(t){ return /```|\$[^$\s]|\\\(|\\\[|^\s*([-*+]|\d+\.)\s|^#{1,4}\s|\*\*[^*]+\*\*|\|.+\|.+\||`[^`]+`/m.test(t); },
+  looksRich(t){ return /\[[^\]\n]+\]\(https?:|```|\$[^$\s]|\\\(|\\\[|^\s*([-*+]|\d+\.)\s|^#{1,4}\s|\*\*[^*]+\*\*|\|.+\|.+\||`[^`]+`/m.test(t); },
   render(t){
     if (!this.setup()) return null;
     const html = marked.parse(String(t));
@@ -1513,7 +1543,7 @@ function texToWords(t){
 }
 function speakable(md){
   let codeSaid = false, mathSaid = false;
-  return String(md)
+  return String(md).replace(/\n\s*(\*\*)?(출처|Sources?)(\*\*)?\s*[:：][\s\S]*$/i, "")
     .replace(/```[\s\S]*?(```|$)/g, () => codeSaid ? " " : (codeSaid = true, " 코드는 화면에 띄워 두었습니다. "))
     .replace(/\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]/g, () => mathSaid ? " " : (mathSaid = true, " 식은 화면에 적어 두었습니다. "))
     .replace(/\$((?:\\.|[^$\n])+?)\$|\\\((.+?)\\\)/g, (m, a, b) => " " + texToWords(a || b) + " ")
@@ -3226,6 +3256,284 @@ function selfDestructTool(i = {}){
 on("self-destruct", (i) => { try { selfDestructTool(i || {}); } catch {} });
 
 // ======================================================================
+//  실시간 검색
+//   1순위: Groq gpt-oss의 browser_search (지금 쓰는 Groq 키 그대로, 서버에서 검색)
+//   2순위: 위키백과 (키 필요 없음)
+// ======================================================================
+async function groqSearch(q, key){
+  const today = new Date().toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric", weekday: "short" });
+  let lastErr;
+  for (const model of ["openai/gpt-oss-120b", "openai/gpt-oss-20b"]){
+    let r;
+    try {
+      r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + key },
+        body: JSON.stringify({ model, reasoning_effort: "low", max_completion_tokens: 1400, temperature: 0.2,
+          tools: [{ type: "browser_search" }], tool_choice: "required",
+          messages: [
+            { role: "system", content: `오늘은 ${today}이다. 웹을 검색해서 질문에 답할 사실을 한국어로 5줄 이내로 정리한다. 날짜·숫자·이름은 정확히, 확실하지 않으면 그렇다고 쓴다. 마지막 줄에 '출처:' 다음에 실제로 본 페이지 URL을 1~3개 쉼표로 적는다.` },
+            { role: "user", content: q },
+          ] }),
+      });
+    } catch { lastErr = new Error("검색 서버에 연결하지 못했습니다."); continue; }
+    const v = await r.json().catch(() => ({}));
+    if (!r.ok){ lastErr = new Error("검색 실패: " + (v?.error?.message || r.status)); if (r.status === 401) break; continue; }
+    const m = v.choices?.[0]?.message || {};
+    const answer = String(m.content || "").replace(/<think>[\s\S]*?(<\/think>|$)/g, "").trim();
+    if (!answer){ lastErr = new Error("검색 결과가 비었습니다."); continue; }
+    const seen = new Set(), sources = [];
+    const add = (url, title) => { try { const u = new URL(url); if (!/^https?:$/.test(u.protocol) || seen.has(u.href)) return; seen.add(u.href); sources.push({ title: String(title || u.hostname).slice(0, 90), url: u.href }); } catch {} };
+    for (const t of m.executed_tools || []){
+      const rs = t?.search_results?.results || t?.search_results || [];
+      if (Array.isArray(rs)) rs.forEach(x => add(x?.url, x?.title));
+      String(t?.output || "").replace(/https?:\/\/[^\s)\]"'<>]+/g, (u) => (add(u), u));
+    }
+    answer.replace(/https?:\/\/[^\s)\]"'<>,]+/g, (u) => (add(u.replace(/[.。]+$/, "")), u));
+    return { via: "web", answer: answer.replace(/\n?\s*출처\s*[:：][\s\S]*$/, "").trim(), sources: sources.slice(0, 5) };
+  }
+  throw lastErr || new Error("검색 실패");
+}
+async function wikiSearch(q){
+  const u = "https://ko.wikipedia.org/w/api.php?" + new URLSearchParams({ action: "query", generator: "search", gsrsearch: q, gsrlimit: "3", prop: "extracts", exintro: "1", explaintext: "1", exchars: "700", format: "json", origin: "*" });
+  let v;
+  try { v = await (await fetch(u)).json(); } catch { throw new Error("검색 서버에 연결하지 못했습니다."); }
+  const pages = Object.values(v?.query?.pages || {}).sort((a, b) => (a.index || 0) - (b.index || 0));
+  if (!pages.length) throw new Error(`'${q}'에 대한 검색 결과가 없습니다.`);
+  return { via: "wikipedia", note: "위키백과 결과라 최신 소식이 아닐 수 있음", answer: pages.map(p => `${p.title}: ${(p.extract || "").replace(/\s+/g, " ").trim()}`).join("\n"),
+    sources: pages.map(p => ({ title: p.title + " - 위키백과", url: "https://ko.wikipedia.org/wiki/" + encodeURIComponent(p.title.replace(/ /g, "_")) })) };
+}
+async function webSearch({ query } = {}){
+  const q = String(query || "").trim().slice(0, 300);
+  if (!q) throw new Error("검색어가 비었습니다.");
+  let res, firstErr;
+  if (cfg.groqKey){ try { res = await groqSearch(q, cfg.groqKey); } catch (e) { firstErr = e; } }
+  if (!res){
+    try { res = await wikiSearch(q); if (firstErr) res.note = "웹 검색이 안 되어(" + firstErr.message + ") 위키백과로 찾음, 최신이 아닐 수 있음"; }
+    catch (e) { throw firstErr || e; }
+  }
+  return JSON.stringify(res);
+}
+
+// ======================================================================
+//  브리핑: 날짜·날씨·할 일·주요 뉴스를 모아 패널로 띄우고, 자비스가 짧게 말한다
+//   하루 처음 화면을 누르면 자동으로 한 번 (SETTINGS에서 끌 수 있음)
+// ======================================================================
+async function briefing({ news = true } = {}){
+  const now = new Date();
+  const dateStr = now.toLocaleDateString("ko-KR", { month: "long", day: "numeric", weekday: "long" });
+  const timeout = (p, ms) => Promise.race([p, new Promise((_, no) => setTimeout(() => no(new Error("시간 초과")), ms))]);
+  const [wx, todos, nw] = await Promise.all([
+    timeout(getWeather(""), 12000).catch(e => ({ error: e.message })),
+    todoStore.list().catch(() => []),
+    news ? timeout(webSearch({ query: `${now.toLocaleDateString("ko-KR")} 오늘 한국 주요 뉴스 헤드라인 3개` }), 25000).then(JSON.parse).catch(e => ({ error: e.message })) : null,
+  ]);
+  const today = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  const open = sortTodos(todos).filter(t => !t.done);
+  const overdue = open.filter(t => t.due && t.due < today), dueToday = open.filter(t => t.due === today);
+  const md = [];
+  md.push(`**${dateStr}** · ${now.toLocaleTimeString("ko-KR", { hour: "numeric", minute: "2-digit" })}`);
+  if (wx && !wx.error){
+    const d0 = wx.days?.[0];
+    md.push(`\n**날씨 · ${wx.place}**  \n${wx.now.desc} ${wx.now.temp}°C (체감 ${wx.now.feels}°C)` + (d0 ? ` · 최고 ${d0.max}° 최저 ${d0.min}°` : "") + (wx.rainNext12h?.maxProb >= 30 ? ` · ${wx.rainNext12h.at}쯤 비 ${wx.rainNext12h.maxProb}%` : ""));
+  } else md.push(`\n**날씨**  \n가져오지 못함 (${wx?.error || "지역 미설정"})`);
+  md.push(`\n**할 일 · 남은 ${open.length}개**` + (overdue.length ? ` · 지난 마감 ${overdue.length}` : "") + (dueToday.length ? ` · 오늘 마감 ${dueToday.length}` : ""));
+  if (open.length) md.push(open.slice(0, 5).map(t => `- ${t.text}${t.due ? ` (${dueLabel(t.due).t})` : ""}`).join("\n"));
+  else md.push("남은 할 일 없음");
+  if (nw){
+    md.push(`\n**주요 뉴스**`);
+    if (nw.error) md.push(`가져오지 못함 (${nw.error})`);
+    else {
+      md.push(nw.answer.split("\n").filter(l => l.trim()).slice(0, 4).map(l => "- " + l.replace(/^\s*(?:[-*•]|\d{1,2}[.)])\s+/, "")).join("\n"));
+      if (nw.sources?.length) md.push("\n" + nw.sources.slice(0, 3).map(s => `[${s.title}](${s.url})`).join(" · "));
+    }
+  }
+  makePanel({ id: "briefing", title: "오늘의 브리핑", kind: "markdown", content: md.join("\n"), width: "wide" });
+  try { localStorage.setItem("jarvis.briefDay", today); } catch {}
+  return JSON.stringify({
+    date: dateStr, time: now.toLocaleTimeString("ko-KR", { hour: "numeric", minute: "2-digit" }),
+    weather: wx && !wx.error ? { place: wx.place, now: wx.now, today: wx.days?.[0], rain: wx.rainNext12h } : wx?.error || null,
+    todos: { open: open.length, overdue: overdue.map(t => t.text), today: dueToday.map(t => t.text), next: open.slice(0, 3).map(t => t.text) },
+    news: nw ? (nw.error ? "가져오지 못함" : nw.answer) : "생략", panel: "브리핑 패널을 화면에 띄웠음",
+  });
+}
+// 하루 첫 상호작용 때 자동 브리핑
+const briefKick = (e) => {
+  if (!e.isTrusted) return;
+  removeEventListener("pointerdown", briefKick, true); removeEventListener("keydown", briefKick, true);
+  if (cfg.autoBrief === false) return;
+  const d = new Date(), today = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  let done = null; try { done = localStorage.getItem("jarvis.briefDay"); } catch {}
+  if (done === today) return;
+  if (!isApp && !cfg.groqKey && !cfg.geminiKey && !cfg.apiKey) return;   // 두뇌가 없으면 건너뜀
+  if (e.target.closest?.("input, textarea, form, button, .sheet, .dragbox")) { addEventListener("pointerdown", briefKick, true); return; }
+  try { localStorage.setItem("jarvis.briefDay", today); } catch {}
+  setTimeout(() => { if (!busy) ask("오늘 브리핑해줘"); }, 500);
+};
+addEventListener("pointerdown", briefKick, true);
+
+// ======================================================================
+//  호출어 "자비스"
+//   브라우저 음성인식이 있으면(크롬·엣지·사파리) 그것으로 계속 듣고,
+//   없으면(앱·파이어폭스) 소리가 날 때만 짧게 잘라 내 Whisper로 받아적어 호출어를 찾는다.
+//   "자비스"만 부르면 띵 소리 뒤 듣기 시작 → 말을 멈추면 자동으로 보냄.
+//   "자비스, 날씨 알려줘"처럼 이어 말하면 바로 그 말을 처리한다.
+// ======================================================================
+const WAKE_RE = /(자비스|쟈비스|재비스|자비쓰|자빗스|자비즈|좌비스|jarvis|j\.a\.r\.v\.i\.s)/i;
+const wake = {
+  on: false, engine: null, sr: null, srAlive: false, stream: null, ctx: null, proc: null,
+  vad: { floor: 0.006, speaking: false, chunks: [], len: 0, quiet: 0, lastSend: 0 }, busyClip: false,
+  canSR(){ return !isApp && !!(window.SpeechRecognition || window.webkitSpeechRecognition) && cfg.wakeEngine !== "whisper"; },
+  paused(){ return busy || holding || mode === "speaking" || sd.phase === "count" || document.hidden; },
+  async start(){
+    if (this.on) return;
+    this.on = true; this.engine = this.canSR() ? "sr" : "vad";
+    try { this.engine === "sr" ? this.startSR() : await this.startVAD(); }
+    catch (e) { this.on = false; this.stopAll(); throw e; }
+    try { localStorage.setItem("jarvis.wake", "on"); } catch {}
+    syncWake();
+  },
+  stop(){
+    this.on = false; this.stopAll();
+    try { localStorage.setItem("jarvis.wake", "off"); } catch {}
+    syncWake();
+  },
+  stopAll(){
+    try { this.sr?.abort(); } catch {} this.sr = null; this.srAlive = false;
+    try { this.proc && (this.proc.onaudioprocess = null); this.src?.disconnect(); this.proc?.disconnect(); } catch {}
+    this.stream?.getTracks().forEach(t => t.stop()); this.stream = null; this.proc = null; this.src = null;
+  },
+  // --- 브라우저 음성인식 ---
+  startSR(){
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const sr = new SR(); this.sr = sr;
+    sr.lang = "ko-KR"; sr.continuous = true; sr.interimResults = true; sr.maxAlternatives = 2;
+    let armedAt = 0;
+    sr.onresult = (e) => {
+      if (this.paused()) return;
+      for (let i = e.resultIndex; i < e.results.length; i++){
+        const res = e.results[i];
+        const alts = Array.from(res).map(a => a.transcript);
+        const hit = alts.find(t => WAKE_RE.test(t));
+        if (!hit) continue;
+        if (!armedAt){ armedAt = performance.now(); wakeCue(); }
+        if (!res.isFinal) continue;
+        armedAt = 0;
+        const rest = hit.split(WAKE_RE).slice(2).join("").replace(/^[\s,.!?~야아]+/, "").trim();
+        this.fire(rest);
+      }
+    };
+    sr.onerror = (e) => {
+      if (e.error === "not-allowed" || e.error === "service-not-allowed"){ this.on = false; this.stopAll(); syncWake("마이크 권한 없음"); }
+      else if (e.error === "network"){ this.engine = "vad"; this.stopAll(); this.startVAD().catch(() => { this.on = false; syncWake("사용할 수 없음"); }); }
+    };
+    sr.onend = () => { this.srAlive = false; if (this.on && this.sr === sr) setTimeout(() => { if (this.on && this.sr === sr){ try { sr.start(); this.srAlive = true; } catch {} } }, 250); };
+    sr.start(); this.srAlive = true;
+  },
+  // --- 소리 감지 + Whisper ---
+  async startVAD(){
+    if (!navigator.mediaDevices?.getUserMedia) throw new Error("이 브라우저는 마이크를 지원하지 않습니다.");
+    try { this.stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); }
+    catch (e) { throw new Error(e?.name === "NotAllowedError" ? "마이크 권한이 없습니다." : "마이크를 찾을 수 없습니다."); }
+    this.ctx ||= new (window.AudioContext || window.webkitAudioContext)();
+    await this.ctx.resume();
+    this.src = this.ctx.createMediaStreamSource(this.stream);
+    this.proc = this.ctx.createScriptProcessor(2048, 1, 1);
+    const mute = this.ctx.createGain(); mute.gain.value = 0;
+    const rate = this.ctx.sampleRate, v = this.vad, block = 2048 / rate;
+    this.proc.onaudioprocess = (e) => {
+      const ch = e.inputBuffer.getChannelData(0);
+      let sum = 0; for (let i = 0; i < ch.length; i++) sum += ch[i] * ch[i];
+      const rms = Math.sqrt(sum / ch.length);
+      if (this.paused() || this.busyClip){ v.speaking = false; v.len = 0; v.chunks = []; return; }
+      if (!v.speaking) v.floor = v.floor * 0.98 + Math.min(rms, 0.05) * 0.02;
+      const loud = rms > Math.max(0.012, v.floor * 3.2);
+      if (loud && !v.speaking){ v.speaking = true; v.chunks = v.pre ? [v.pre] : []; v.len = v.pre ? v.pre.length : 0; v.quiet = 0; }
+      v.pre = new Float32Array(ch);
+      if (!v.speaking) return;
+      v.chunks.push(new Float32Array(ch)); v.len += ch.length;
+      v.quiet = loud ? 0 : v.quiet + block;
+      const dur = v.len / rate;
+      if (v.quiet > 0.55 || dur > 3.2){
+        v.speaking = false;
+        const speech = dur - v.quiet;
+        const all = new Float32Array(v.len); let o = 0; for (const c of v.chunks){ all.set(c, o); o += c.length; }
+        v.chunks = []; v.len = 0;
+        if (speech < 0.3 || speech > 3.2 || performance.now() - v.lastSend < 1500) return;
+        v.lastSend = performance.now();
+        this.checkClip(downsample16k(all, rate));
+      }
+    };
+    this.src.connect(this.proc); this.proc.connect(mute); mute.connect(this.ctx.destination);
+  },
+  async checkClip(pcm){
+    this.busyClip = true;
+    try {
+      const text = String(await api.transcribeClip(pcm) || "");
+      if (!WAKE_RE.test(text) || this.paused()) return;
+      wakeCue();
+      const rest = text.split(WAKE_RE).slice(2).join("").replace(/^[\s,.!?~야아]+/, "").trim();
+      this.fire(rest);
+    } catch {} finally { this.busyClip = false; }
+  },
+  fire(rest){
+    if (this.paused()) return;
+    if (rest && rest.replace(/[\s.,!?]/g, "").length >= 2){ ask(rest); return; }
+    autoListen();
+  },
+};
+function downsample16k(x, rate){
+  if (rate === 16000) return x;
+  const ratio = rate / 16000, n = Math.floor(x.length / ratio), out = new Float32Array(n);
+  for (let i = 0; i < n; i++){ const a = Math.floor(i * ratio), b = Math.min(x.length, Math.floor((i + 1) * ratio)); let s = 0; for (let k = a; k < b; k++) s += x[k]; out[i] = s / Math.max(1, b - a); }
+  return out;
+}
+// 띵: 호출어를 알아들었다는 표시 (소리 + 홀로그램 반짝)
+function wakeCue(){
+  try {
+    const ac = sdAudio(); ac?.resume?.();
+    const t = ac.currentTime;
+    [[880, 0], [1318.5, 0.09]].forEach(([f, d]) => {
+      const o = ac.createOscillator(), g = ac.createGain(); o.type = "sine"; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t + d); g.gain.exponentialRampToValueAtTime(0.12, t + d + 0.015); g.gain.exponentialRampToValueAtTime(0.0001, t + d + 0.35);
+      o.connect(g); g.connect(ac.destination); o.start(t + d); o.stop(t + d + 0.4);
+    });
+  } catch {}
+  document.body.classList.remove("woke"); void document.body.offsetWidth; document.body.classList.add("woke");
+}
+// 호출 뒤: 듣기 시작 → 말이 끝나고 1.1초 조용하면 자동으로 보냄 (5초 동안 말이 없으면 취소)
+async function autoListen(){
+  if (holding || busy) return;
+  await pttDown("wake");
+  if (!holding) return;
+  const t0 = performance.now(); let spoke = false, quietSince = 0;
+  const iv = setInterval(() => {
+    if (!holding || holdSource !== "wake"){ clearInterval(iv); return; }
+    const now = performance.now();
+    if (micLevel > 0.14){ spoke = true; quietSince = 0; }
+    else if (spoke && !quietSince) quietSince = now;
+    if ((spoke && quietSince && now - quietSince > 1100) || now - t0 > 15000 || (!spoke && now - t0 > 5000)){ clearInterval(iv); pttUp("wake"); }
+  }, 80);
+}
+function syncWake(err){
+  $("wakeBtn").textContent = wake.on ? "WAKE ON" : "WAKE OFF";
+  const st = $("stWake");
+  st.textContent = err || (wake.on ? `"자비스" 대기 · ${wake.engine === "sr" ? "브라우저" : "Whisper"}` : "꺼짐");
+  st.classList.toggle("bad", !!err);
+  document.body.classList.toggle("wakeOn", wake.on);
+}
+$("wakeBtn").onclick = () => wake.on ? wake.stop() : wake.start().catch(e => syncWake(e.message));
+syncWake();
+// 지난번에 켜 두었고 마이크 권한이 이미 있으면 자동으로 다시 켠다
+(async () => {
+  let want = false; try { want = localStorage.getItem("jarvis.wake") === "on"; } catch {}
+  if (!want) return;
+  try { const p = await navigator.permissions?.query({ name: "microphone" }); if (p && p.state !== "granted") { syncWake("눌러서 켜기"); return; } } catch {}
+  wake.start().catch(e => syncWake(e.message));
+})();
+// 백그라운드 탭에서 브라우저 음성인식이 멈추면 돌아왔을 때 다시 켠다
+document.addEventListener("visibilitychange", () => { if (!document.hidden && wake.on && wake.engine === "sr" && !wake.srAlive){ try { wake.sr?.start(); wake.srAlive = true; } catch {} } });
+
+// ======================================================================
 //  대화
 // ======================================================================
 let busy = false;
@@ -3468,7 +3776,7 @@ try { if (localStorage.getItem("jarvis.hand") === "on") startHand(); } catch {}
 on("mic-level", (v) => { micLevel = Math.max(0, Math.min(1, +v || 0)); });
 on("hologram", (m) => { if (PALETTES[m]) mood = m; });
 on("tool", (p) => logLine("tool", "", "▸ " + (String(p?.name).startsWith("fallback:") ? "바쁜 모델 대신 " + p.name.slice(9) + " 사용" : (TOOL_NAMES[p?.name] || p?.name))));
-const TOOL_NAMES = { get_datetime:"시각 확인", open_app:"프로그램 실행", open_url:"브라우저 열기", set_volume:"볼륨 조절", set_timer:"타이머 설정", set_hologram:"홀로그램 전환", create_file:"파일 만들기", read_file:"첨부 파일 읽기", open_file_picker:"파일 선택 창", show_file:"파일 다시 보기", add_todo:"할 일 추가", list_todos:"할 일 확인", complete_todo:"할 일 완료", remove_todo:"할 일 삭제", show_todos:"할 일 카드", get_weather:"날씨 확인", remember:"기록하기", recall:"기록 찾기", show_memory:"기록 화면", make_panel:"패널 만들기", self_destruct:"자폭 시퀀스", play_music:"음악 틀기", music_control:"음악 제어", now_playing:"지금 나오는 곡", close_panel:"패널 닫기", arrange_panel:"화면 배치" };
+const TOOL_NAMES = { get_datetime:"시각 확인", open_app:"프로그램 실행", open_url:"브라우저 열기", set_volume:"볼륨 조절", set_timer:"타이머 설정", set_hologram:"홀로그램 전환", create_file:"파일 만들기", read_file:"첨부 파일 읽기", open_file_picker:"파일 선택 창", show_file:"파일 다시 보기", add_todo:"할 일 추가", list_todos:"할 일 확인", complete_todo:"할 일 완료", remove_todo:"할 일 삭제", show_todos:"할 일 카드", get_weather:"날씨 확인", remember:"기록하기", recall:"기록 찾기", show_memory:"기록 화면", make_panel:"패널 만들기", self_destruct:"자폭 시퀀스", web_search:"웹 검색", briefing:"브리핑", play_music:"음악 틀기", music_control:"음악 제어", now_playing:"지금 나오는 곡", close_panel:"패널 닫기", arrange_panel:"화면 배치" };
 
 const timers = new Map();
 on("timer-set", ({id, label, seconds}) => {
@@ -3852,7 +4160,7 @@ $("testMicBtn").onclick = async () => {
   }
 };
 function openSettings(){
-  $("cfgTts").value = cfg.tts; $("cfgCity").value = cfg.city || ""; $("cfgSpotify").value = cfg.spotifyId || ""; syncSpotifyCfg(); $("cfgAmb").value = cfg.ambVol ?? 45;
+  $("cfgTts").value = cfg.tts; $("cfgCity").value = cfg.city || ""; $("cfgSpotify").value = cfg.spotifyId || ""; syncSpotifyCfg(); $("cfgWakeEng").value = cfg.wakeEngine || "auto"; $("cfgBrief").checked = cfg.autoBrief !== false; $("cfgAmb").value = cfg.ambVol ?? 45;
   $("cfgModel").value = cfg.brain; $("cfgGroqKey").value = cfg.groqKey; $("cfgGeminiKey").value = cfg.geminiKey; $("cfgKey").value = cfg.apiKey; $("cfgWhisper").value = cfg.whisper;
   syncKeyFields(); panel.hidden = false; $("diagOut").hidden = true;
   if (!isApp) ({ groq: $("cfgGroqKey"), gemini: $("cfgGeminiKey"), claude: $("cfgKey") })[BRAINS[cfg.brain].provider].focus();
@@ -3868,7 +4176,8 @@ $("cfgForm").addEventListener("submit", (e) => {
   cfg.brain = $("cfgModel").value; cfg.groqKey = $("cfgGroqKey").value.trim(); cfg.geminiKey = $("cfgGeminiKey").value.trim(); cfg.apiKey = $("cfgKey").value.trim();
   cfg.whisper = $("cfgWhisper").value;
   const cityChanged = (cfg.city || "") !== $("cfgCity").value.trim();
-  cfg.city = $("cfgCity").value.trim(); cfg.ambVol = +$("cfgAmb").value; cfg.spotifyId = $("cfgSpotify").value.trim();
+  cfg.city = $("cfgCity").value.trim(); cfg.ambVol = +$("cfgAmb").value; cfg.spotifyId = $("cfgSpotify").value.trim(); cfg.autoBrief = $("cfgBrief").checked;
+  if ((cfg.wakeEngine || "auto") !== $("cfgWakeEng").value){ cfg.wakeEngine = $("cfgWakeEng").value; if (wake.on){ wake.stop(); wake.start().catch(e => syncWake(e.message)); } }
   if (cityChanged){ cfg.cityGeo = null; refreshWxStatus(); if (isApp) T.core.invoke("set_city", { city: cfg.city }).catch(() => {}); }
   const ttsChanged = cfg.tts !== $("cfgTts").value;
   cfg.tts = $("cfgTts").value;

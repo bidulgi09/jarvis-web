@@ -5,6 +5,7 @@ mod audio;
 mod brain;
 mod memory;
 mod music;
+mod search;
 mod stt;
 mod todo;
 mod tools;
@@ -202,6 +203,19 @@ async fn spotify_auth(url: String) -> Result<String, String> {
         .map_err(|e| format!("{e:#}"))
 }
 
+/// 호출어용 짧은 소리 조각(16kHz) 받아적기
+#[tauri::command]
+async fn transcribe_clip(state: State<'_, AppState>, pcm: Vec<f32>) -> Result<String, String> {
+    if pcm.len() > 16_000 * 6 {
+        return Err("너무 깁니다".into());
+    }
+    state
+        .stt
+        .transcribe(pcm)
+        .await
+        .map_err(|e| format!("{e:#}"))
+}
+
 #[tauri::command]
 fn ui_tool_reply(id: u64, ok: Option<String>, error: Option<String>) {
     tools::ui_reply(id, ok.ok_or_else(|| error.unwrap_or_else(|| "실패".into())));
@@ -285,6 +299,7 @@ fn main() {
             set_city,
             spotify_auth,
             ui_tool_reply,
+            transcribe_clip,
             music_capture
         ])
         .run(tauri::generate_context!())

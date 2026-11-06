@@ -17,6 +17,24 @@ use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 use tokio::sync::oneshot;
 
+/// "- 뉴스", "1. 뉴스" 같은 목록 기호만 떼어 낸다 (숫자로 시작하는 본문은 그대로)
+fn strip_bullet(l: &str) -> &str {
+    let t = l.trim_start();
+    for b in ["- ", "* ", "• "] {
+        if let Some(r) = t.strip_prefix(b) {
+            return r.trim_start();
+        }
+    }
+    let digits = t.chars().take_while(|c| c.is_ascii_digit()).count();
+    if (1..=2).contains(&digits) {
+        let rest = &t[digits..];
+        if let Some(r) = rest.strip_prefix(". ").or_else(|| rest.strip_prefix(") ")) {
+            return r.trim_start();
+        }
+    }
+    t
+}
+
 // ---------- 화면이 대신 처리하는 도구 (Spotify처럼 토큰이 웹뷰에 있는 것) ----------
 
 type Reply = oneshot::Sender<std::result::Result<String, String>>;
@@ -303,6 +321,16 @@ pub fn schemas(tb: &Toolbox) -> Value {
             "name": "now_playing",
             "description": "지금 Spotify에서 나오는 곡 정보를 가져온다.",
             "input_schema": { "type": "object", "properties": {} }
+        },
+        {
+            "name": "web_search",
+            "description": "웹을 실시간으로 검색한다. 오늘 뉴스, 최근 사건, 경기 결과, 가격·환율, 현재 직책, 출시 일정, 영업시간처럼 바뀌는 정보나 잘 모르는 것은 답하기 전에 꼭 쓴다. query는 검색어(한국어 가능).",
+            "input_schema": { "type": "object", "properties": { "query": { "type": "string" } }, "required": ["query"] }
+        },
+        {
+            "name": "briefing",
+            "description": "오늘의 브리핑: 날짜, 날씨, 할 일(마감 포함), 주요 뉴스를 모아 화면에 브리핑 패널을 띄운다. '브리핑', '오늘 뭐 있어', '아침 정리' 같은 말에 쓴다. news=false면 뉴스 생략.",
+            "input_schema": { "type": "object", "properties": { "news": { "type": "boolean" } } }
         },
         {
             "name": "self_destruct",
@@ -608,6 +636,145 @@ pub async fn run(app: &AppHandle, tb: &Toolbox, name: &str, input: &Value) -> Re
             let target = input["target"].as_str().unwrap_or("all");
             let _ = app.emit("panel-close", target);
             Ok(format!("패널 닫음: {target}"))
+        }
+
+        "web_search" => {
+            let v = crate::search::search(&tb.http, input["query"].as_str().unwrap_or_default())
+                .await?;
+            Ok(v.to_string())
+        }
+
+        "briefing" => {
+            let now = chrono::Local::now();
+            const DAYS: [&str; 7] = ["월", "화", "수", "목", "금", "토", "일"];
+            let date = format!(
+                "{}월 {}일 {}요일",
+                now.format("%-m"),
+                now.format("%-d"),
+                DAYS[now.format("%u").to_string().parse::<usize>().unwrap_or(1) - 1]
+            );
+            let today = now.format("%Y-%m-%d").to_string();
+            let city = tb.city.lock().map(|c| c.clone()).unwrap_or_default();
+            let want_news = input["news"].as_bool().unwrap_or(true);
+            let news_q = format!(
+                "{} 오늘 한국 주요 뉴스 헤드라인 3개",
+                now.format("%Y년 %-m월 %-d일")
+            );
+            let (wx, news) = tokio::join!(
+                async {
+                    if city.is_empty() {
+                        Err(anyhow::anyhow!("SETTINGS에서 날씨 기본 지역을 정해 주세요"))
+                    } else {
+                        crate::weather::get(&tb.http, &city).await
+                    }
+                },
+                async {
+                    if want_news {
+                        Some(crate::search::search(&tb.http, &news_q).await)
+                    } else {
+                        None
+                    }
+                }
+            );
+            let open: Vec<_> = tb.todos.sorted().into_iter().filter(|t| !t.done).collect();
+            let overdue: Vec<_> = open
+                .iter()
+                .filter(|t| !t.due.is_empty() && t.due < today)
+                .map(|t| t.text.clone())
+                .collect();
+            let due_today: Vec<_> = open
+                .iter()
+                .filter(|t| t.due == today)
+                .map(|t| t.text.clone())
+                .collect();
+
+            let mut md = vec![format!("**{date}** · {}", now.format("%H:%M"))];
+            match &wx {
+                Ok(w) => {
+                    let d0 = &w["days"][0];
+                    let mut line = format!(
+                        "\n**날씨 · {}**  \n{} {}°C (체감 {}°C) · 최고 {}° 최저 {}°",
+                        w["place"].as_str().unwrap_or(""),
+                        w["now"]["desc"].as_str().unwrap_or(""),
+                        w["now"]["temp"],
+                        w["now"]["feels"],
+                        d0["max"],
+                        d0["min"]
+                    );
+                    if w["rainNext12h"]["maxProb"].as_i64().unwrap_or(0) >= 30 {
+                        line += &format!(
+                            " · {}쯤 비 {}%",
+                            w["rainNext12h"]["at"].as_str().unwrap_or(""),
+                            w["rainNext12h"]["maxProb"]
+                        );
+                    }
+                    md.push(line);
+                }
+                Err(e) => md.push(format!("\n**날씨**  \n가져오지 못함 ({e})")),
+            }
+            md.push(format!("\n**할 일 · 남은 {}개**", open.len()));
+            if open.is_empty() {
+                md.push("남은 할 일 없음".into());
+            } else {
+                md.push(
+                    open.iter()
+                        .take(5)
+                        .map(|t| {
+                            if t.due.is_empty() {
+                                format!("- {}", t.text)
+                            } else {
+                                format!("- {} ({})", t.text, t.due)
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n"),
+                );
+            }
+            let mut news_text = "생략".to_string();
+            if let Some(n) = &news {
+                md.push("\n**주요 뉴스**".into());
+                match n {
+                    Ok(v) => {
+                        news_text = v["answer"].as_str().unwrap_or("").to_string();
+                        md.push(
+                            news_text
+                                .lines()
+                                .filter(|l| !l.trim().is_empty())
+                                .take(4)
+                                .map(|l| format!("- {}", strip_bullet(l)))
+                                .collect::<Vec<_>>()
+                                .join("\n"),
+                        );
+                        let links: Vec<String> = v["sources"]
+                            .as_array()
+                            .into_iter()
+                            .flatten()
+                            .take(3)
+                            .map(|s| {
+                                format!(
+                                    "[{}]({})",
+                                    s["title"].as_str().unwrap_or(""),
+                                    s["url"].as_str().unwrap_or("")
+                                )
+                            })
+                            .collect();
+                        if !links.is_empty() {
+                            md.push(format!("\n{}", links.join(" · ")));
+                        }
+                    }
+                    Err(e) => {
+                        news_text = "가져오지 못함".into();
+                        md.push(format!("가져오지 못함 ({e})"));
+                    }
+                }
+            }
+            let _ = app.emit("panel", json!({ "id": "briefing", "title": "오늘의 브리핑", "kind": "markdown", "width": "wide", "content": md.join("\n") }));
+            Ok(json!({
+                "date": date, "time": now.format("%H:%M").to_string(),
+                "weather": wx.as_ref().map(|w| json!({ "place": w["place"], "now": w["now"], "today": w["days"][0], "rain": w["rainNext12h"] })).unwrap_or_else(|e| json!(e.to_string())),
+                "todos": { "open": open.len(), "overdue": overdue, "today": due_today, "next": open.iter().take(3).map(|t| t.text.clone()).collect::<Vec<_>>() },
+                "news": news_text, "panel": "브리핑 패널을 화면에 띄웠음"
+            }).to_string())
         }
 
         "self_destruct" => {
