@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>J.A.R.V.I.S. MK.II</title>
+<title>J.A.R.V.I.S.</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Syncopate:wght@400;700&family=IBM+Plex+Sans+KR:wght@300;400;500&family=JetBrains+Mono:wght@400;500&display=swap">
 <style>
@@ -52,7 +52,75 @@ body{background:var(--void);color:var(--ink);font-family:var(--f-body);font-size
 .state[data-m="thinking"]{color:var(--ink)}
 .state[data-m="speaking"]{color:var(--holo)}
 
-.timers{position:absolute;right:0;top:4px;display:flex;flex-direction:column;gap:8px;align-items:flex-end}
+.rcol{position:absolute;right:0;top:4px;display:flex;flex-direction:column;gap:10px;align-items:flex-end;max-height:100%;min-height:0}
+.timers{display:flex;flex-direction:column;gap:8px;align-items:flex-end}
+.card{width:270px;max-width:100%;background:rgba(8,8,26,.55);border:1px solid var(--faint);border-radius:16px;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  animation:rise .5s var(--ease) both;min-height:0;display:flex;flex-direction:column}
+.card[hidden]{display:none}
+.wx{flex:none}
+.todo{flex:0 1 auto;min-height:118px;display:flex;flex-direction:column;overflow:hidden}
+.todo ul{flex:1 1 auto;min-height:0}
+.card header{display:flex;align-items:center;gap:8px;padding:10px 12px 8px}
+.card header b{font-family:var(--f-display);font-size:10px;letter-spacing:.34em;font-weight:700}
+.card header .sub{font-family:var(--f-mono);font-size:10px;color:var(--dim);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.card header button{background:none;border:0;color:var(--dim);font-family:var(--f-mono);font-size:11px;cursor:pointer;padding:4px 6px}
+.card header button:hover{color:var(--ink)}
+.todo ul{list-style:none;margin:0;padding:0 6px;overflow-y:auto;max-height:34vh;scrollbar-width:thin}
+.todo li{display:flex;align-items:flex-start;gap:8px;padding:6px 6px;border-radius:10px;font-size:13px;line-height:1.45}
+.todo li:hover{background:rgba(127,243,255,.05)}
+.todo li .ck{flex:none;width:16px;height:16px;margin-top:2px;border-radius:50%;border:1.5px solid rgba(127,243,255,.6);background:transparent;cursor:pointer;padding:0;display:grid;place-items:center;color:var(--void);font-size:10px}
+.todo li.done .ck{background:var(--holo);border-color:var(--holo)}
+.todo li .tx{flex:1;min-width:0;overflow-wrap:anywhere}
+.todo li.done .tx{text-decoration:line-through;color:var(--dim)}
+.todo li .due{flex:none;font-family:var(--f-mono);font-size:10px;color:var(--dim);margin-top:2px}
+.todo li .due.late{color:var(--danger)} .todo li .due.today{color:var(--warm)}
+.todo li .rm{flex:none;background:none;border:0;color:var(--dim);cursor:pointer;opacity:0;padding:0 2px;font-size:13px}
+.todo li:hover .rm,.todo li .rm:focus-visible{opacity:1}
+.todo .empty{padding:4px 12px 8px;font-size:12px;color:var(--dim)}
+.todo form{padding:6px 10px 10px}
+.todo input{width:100%;background:rgba(4,3,12,.6);border:1px solid var(--faint);border-radius:10px;color:var(--ink);font:inherit;font-size:13px;padding:7px 10px}
+.todo input:focus{outline:none;border-color:rgba(127,243,255,.5)}
+.wx .now{display:flex;align-items:center;gap:12px;padding:0 14px 6px}
+.wx .sym{font-size:30px;line-height:1;color:var(--warm);text-shadow:0 0 18px rgba(255,207,138,.5)}
+.wx .temp{font-family:var(--f-display);font-size:30px;letter-spacing:.02em;font-variant-numeric:tabular-nums}
+.wx .desc{font-size:13px;line-height:1.4} .wx .desc small{display:block;font-family:var(--f-mono);font-size:10px;color:var(--dim)}
+.wx .facts{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:4px 14px 8px;font-family:var(--f-mono);font-size:10px;color:var(--dim)}
+.wx .facts b{display:block;font-family:var(--f-body);font-size:13px;font-weight:400;color:var(--ink)}
+.wx .days{display:grid;grid-template-columns:repeat(4,1fr);gap:2px;border-top:1px solid var(--faint);padding:8px 8px 10px;text-align:center;font-size:11px}
+.wx .days span{display:block;font-family:var(--f-mono);font-size:10px;color:var(--dim)}
+.wx .days i{font-style:normal;display:block;font-size:15px;margin:2px 0;color:var(--warm)}
+.wx .days em{font-style:normal;font-family:var(--f-mono);font-size:10px;color:var(--holo)}
+/* 마크다운·LaTeX·코드 */
+.reply.md{text-align:left;font-size:15px;line-height:1.65;text-wrap:pretty;font-weight:400}
+.reply.md > *{margin:0 0 .6em;animation:rise .55s var(--ease) both}
+.reply.md > :last-child{margin-bottom:0}
+.reply.md h1,.reply.md h2,.reply.md h3{font-size:16px;font-weight:600;margin-top:.4em}
+.reply.md ul,.reply.md ol{padding-left:1.3em}
+.reply.md li{margin:.15em 0}
+.reply.md a{color:var(--holo)}
+.reply.md blockquote{margin-left:0;padding-left:12px;border-left:2px solid var(--faint);color:var(--dim)}
+.reply.md table{border-collapse:collapse;font-size:13px;display:block;overflow-x:auto;max-width:100%}
+.reply.md th,.reply.md td{border:1px solid var(--faint);padding:4px 10px;text-align:left}
+.reply.md th{background:rgba(127,243,255,.06)}
+.reply.md :not(pre) > code{font-family:var(--f-mono);font-size:.88em;background:rgba(127,243,255,.08);border:1px solid var(--faint);border-radius:6px;padding:.05em .35em}
+.math{overflow-x:auto;overflow-y:hidden;padding:4px 0;text-align:center}
+math{font-size:1.08em}
+math[display="block"]{display:block;margin:.2em 0}
+.code{border:1px solid var(--faint);border-radius:12px;background:rgba(4,3,14,.82);overflow:hidden;text-align:left}
+.codeHead{display:flex;justify-content:space-between;align-items:center;padding:5px 8px 5px 12px;border-bottom:1px solid var(--faint);font-family:var(--f-mono);font-size:10px;letter-spacing:.14em;color:var(--dim);text-transform:uppercase}
+.codeHead button{background:none;border:1px solid var(--faint);border-radius:8px;color:var(--dim);font-family:var(--f-mono);font-size:10px;letter-spacing:.08em;padding:3px 8px;cursor:pointer}
+.codeHead button:hover{color:var(--ink)}
+.code pre{margin:0;padding:10px 12px;overflow-x:auto;font-family:var(--f-mono);font-size:12.5px;line-height:1.6;color:#d8e6ff;text-shadow:none;tab-size:4}
+.hljs-keyword,.hljs-selector-tag,.hljs-built_in,.hljs-meta .hljs-keyword{color:#c792ff}
+.hljs-string,.hljs-attr .hljs-string,.hljs-template-tag,.hljs-addition{color:#a8f0b0}
+.hljs-number,.hljs-literal,.hljs-symbol{color:#ffcf8a}
+.hljs-comment,.hljs-quote{color:#6f7aa6;font-style:italic}
+.hljs-title,.hljs-title.function_,.hljs-section{color:#7ff3ff}
+.hljs-type,.hljs-class .hljs-title,.hljs-title.class_{color:#ffb0d0}
+.hljs-attr,.hljs-attribute,.hljs-variable,.hljs-params,.hljs-property{color:#b8c8ff}
+.hljs-meta,.hljs-deletion{color:#ff9c8a}
+.log .l.j .b > *{margin:0 0 .4em} .log .l.j .b .code pre{font-size:11px;max-height:180px}
+.log .l.j .b table{font-size:11px}
 .timer{font-family:var(--f-mono);font-size:12px;padding:6px 12px;background:var(--glass);border:1px solid var(--faint);backdrop-filter:blur(8px);
   display:flex;gap:12px;align-items:center;animation:rise .7s var(--ease) both}
 .timer .t{color:var(--warm);font-variant-numeric:tabular-nums}
@@ -220,7 +288,11 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--holo);outline-o
   .hint button{padding:10px 8px;min-height:40px}
   .caption{max-height:26vh}
   .cam canvas{width:120px;height:90px}
-  .timers{top:0}
+  .rcol{left:0;right:0;align-items:stretch}
+  .rcol .timers{align-items:flex-end}
+  .card{width:auto}
+  .todo ul{max-height:22vh}
+  .reply.md{font-size:14px}
   .sat{width:30px;height:30px;margin:-15px 0 0 -15px}
   .fvActs{margin-left:0}
   .status{grid-template-columns:auto}
@@ -249,12 +321,26 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--holo);outline-o
       <span>음성인식</span><b id="stEar">확인 중</b>
       <span>목소리</span><b id="stVoice">브라우저</b>
       <span>손 인식</span><b id="stHand">꺼짐</b>
+      <span>날씨</span><b id="stWx">—</b>
     </div>
   </div>
 
   <div class="middle">
     <div class="log" id="log" aria-live="polite"></div>
-    <div class="timers" id="timers"></div>
+    <div class="rcol" id="rcol">
+      <div class="timers" id="timers"></div>
+      <section class="card wx" id="wx" hidden aria-label="날씨">
+        <header><b>WEATHER</b><span class="sub" id="wxPlace"></span><button type="button" id="wxClose" aria-label="날씨 닫기">✕</button></header>
+        <div class="now"><div class="sym" id="wxSym"></div><div class="temp" id="wxTemp"></div><div class="desc" id="wxDesc"></div></div>
+        <div class="facts" id="wxFacts"></div>
+        <div class="days" id="wxDays"></div>
+      </section>
+      <section class="card todo" id="todo" hidden aria-label="할 일">
+        <header><b>TO DO</b><span class="sub" id="todoCount"></span><button type="button" id="todoClear" hidden>완료 지우기</button><button type="button" id="todoHide" aria-label="할 일 닫기">✕</button></header>
+        <ul id="todoList"></ul>
+        <form id="todoForm" autocomplete="off"><input id="todoInput" type="text" placeholder="할 일 추가 (Enter)" aria-label="할 일 추가"></form>
+      </section>
+    </div>
     <div class="state" id="state" data-m="idle">STANDBY</div>
     <div class="cam" id="cam" hidden>
       <canvas id="camView" width="352" height="264" aria-label="손 인식 카메라 미리보기"></canvas>
@@ -285,6 +371,8 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--holo);outline-o
     <div class="hint">
       <span class="kbdhint"><kbd>Space</kbd> 누르고 있는 동안 말하기 · ✋ 펴면 듣기, ✊ 쥐면 보내기</span>
       <button type="button" id="memBtn">MEMORY</button>
+      <button type="button" id="todoBtn">TO DO</button>
+      <button type="button" id="ambBtn">AMBIENT</button>
       <button type="button" id="handBtn">HAND OFF</button>
       <button type="button" id="logBtn">LOG</button>
       <button type="button" id="voiceBtn">VOICE ON</button>
@@ -385,6 +473,11 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--holo);outline-o
     </select>
     <p class="note" id="whisperNote"></p>
     </div>
+    <label for="cfgCity">날씨 기본 지역</label>
+    <input id="cfgCity" type="text" placeholder="예: 대구, 서울 강남구, Tokyo" spellcheck="false">
+    <p class="note">비워 두면 날씨를 물을 때 기기 위치를 쓸지 물어봅니다. 날씨는 Open-Meteo(무료, 키 없음)에서 가져옵니다.</p>
+    <label for="cfgAmb">배경음 크기</label>
+    <input id="cfgAmb" type="range" min="0" max="100" step="1">
     <label for="cfgTts">목소리</label>
     <select id="cfgTts">
       <optgroup label="Supertonic (무료 · 자연스러움 · 기기 안에서 생성)">
@@ -410,6 +503,10 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--holo);outline-o
   </form>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <script>
 (() => {
 "use strict";
@@ -514,7 +611,10 @@ const memSummary = (r) => ({ title: r.title, content: r.content, tags: r.tags, r
 function webSystemPrompt(){
   const titles = localMem.all().sort((a, b) => b.updated - a.updated).slice(0, 40).map(r => r.title);
   return `너는 토니 스타크의 AI 비서 J.A.R.V.I.S.다. 사용자를 '주인님'이라 부르고, 침착하고 정중하며 살짝 위트 있는 영국 집사 같은 말투의 한국어로 답한다.
-답변은 음성으로 읽히므로 보통 1~3문장으로 짧게, 마크다운·이모지·목록 기호 없이 말하듯 쓴다.
+평소 대답은 음성으로 읽히므로 1~3문장으로 말하듯 짧게 쓴다. 이모지는 쓰지 않는다.
+다만 수식·코드·표·여러 단계 설명이 필요하면 화면에 서식이 그대로 보이므로: 수식은 LaTeX($...$, 따로 줄은 $$...$$), 코드는 \`\`\`언어 코드 블록, 목록·표·굵은 글씨는 마크다운으로 쓴다. 이때는 길어져도 된다.
+할 일을 말하면 add_todo로 추가하고(마감이 있으면 due에 YYYY-MM-DD), 끝냈다고 하면 complete_todo, 할 일을 물으면 list_todos를 쓴다.
+날씨를 물으면 get_weather를 쓴다. 지역을 말하지 않았으면 place를 비운다.
 사용자의 말은 음성 인식 결과라 오타가 있을 수 있으니 의도를 추론한다.
 타이머, 홀로그램 분위기, 링크 열기, 파일 만들기, 시각 확인은 반드시 도구를 호출해서 처리한다.
 사용자가 기억·기록·메모해 달라고 하거나 일정·마감·선호처럼 나중에 다시 쓸 정보를 말하면 remember로 기록한다. 주제 태그 2~4개를 붙이고, 이미 있는 기록과 관련 있으면 related에 그 제목을 넣어 이어 준다.
@@ -637,6 +737,24 @@ const WEB_TOOLS = [
       openViewer(f.id);
       return `${f.name}을(를) 화면에 띄웠음`;
     } },
+  { name: "add_todo", description: "할 일 목록에 추가한다. due는 마감일(YYYY-MM-DD)이 있을 때만.",
+    input_schema: { type: "object", properties: { text: { type: "string" }, due: { type: "string" } }, required: ["text"] },
+    run: async (i) => { const t = await todoStore.add(i.text, i.due); await renderTodos(); if (!todoOpen && !narrowScreen()) setTodoOpen(true); return `추가함: ${t.text}${t.due ? " (마감 " + t.due + ")" : ""}`; } },
+  { name: "list_todos", description: "할 일 목록을 돌려준다 (남은 것 먼저, 번호 포함).",
+    input_schema: { type: "object", properties: {} },
+    run: async () => { await renderTodos(); const a = sortTodos(todoCache); return a.length ? JSON.stringify(a.map((t, n) => ({ n: n + 1, text: t.text, due: t.due || null, done: t.done }))) : "할 일 없음"; } },
+  { name: "complete_todo", description: "할 일을 끝냄으로 표시한다. query는 할 일 내용 일부나 '2번' 같은 번호.",
+    input_schema: { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
+    run: async (i) => { await renderTodos(); const t = findTodo(i.query); if (!t) throw new Error("그런 할 일이 없습니다"); await todoStore.toggle(t.id, true); await renderTodos(); return `완료: ${t.text}`; } },
+  { name: "remove_todo", description: "할 일을 목록에서 지운다. query는 내용 일부나 번호.",
+    input_schema: { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
+    run: async (i) => { await renderTodos(); const t = findTodo(i.query); if (!t) throw new Error("그런 할 일이 없습니다"); await todoStore.remove(t.id); await renderTodos(); return `지움: ${t.text}`; } },
+  { name: "show_todos", description: "할 일 카드를 화면에 열거나 닫는다.",
+    input_schema: { type: "object", properties: { open: { type: "boolean" } }, required: ["open"] },
+    run: (i) => { setTodoOpen(!!i.open); return i.open ? "할 일 카드를 열었음" : "할 일 카드를 닫았음"; } },
+  { name: "get_weather", description: "현재 날씨와 4일 예보를 가져와 화면에 날씨 카드를 띄운다. place는 지역 이름(예: 대구, 서울 강남구). 사용자가 지역을 말하지 않았으면 비운다.",
+    input_schema: { type: "object", properties: { place: { type: "string" } } },
+    run: async (i) => JSON.stringify(await getWeather(i.place)) },
   { name: "show_memory", description: "기록 네트워크 화면을 열거나 닫는다.",
     input_schema: { type: "object", properties: { open: { type: "boolean" } }, required: ["open"] },
     run: (i) => { fire("memory-panel", !!i.open); return i.open ? "기록 화면을 열었음" : "기록 화면을 닫았음"; } },
@@ -1199,13 +1317,115 @@ let voiceOn = true;
 try { voiceOn = localStorage.getItem("jarvis.voice") !== "off"; } catch {}
 
 const STATE_LABEL = { idle:"STANDBY", listening:"LISTENING", thinking:"PROCESSING", speaking:"SPEAKING" };
-function setMode(m){ mode = m; const el = $("state"); el.dataset.m = m; el.textContent = STATE_LABEL[m]; }
+function setMode(m){ mode = m; const el = $("state"); el.dataset.m = m; el.textContent = STATE_LABEL[m]; if (typeof ambient !== "undefined") ambient.duckFor(m); }
 
 // ======================================================================
 //  자막 / 로그
 // ======================================================================
+// ======================================================================
+//  답변 서식: 마크다운(marked) + LaTeX(KaTeX, MathML로 출력해 별도 CSS 없이 표시) + 코드 상자(highlight.js)
+//  모델 출력은 DOMPurify로 거른 뒤에만 화면에 넣는다.
+// ======================================================================
+const escHtml = (t) => String(t).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const MD = {
+  ready: false,
+  setup(){
+    if (this.ready) return true;
+    if (!window.marked || !window.DOMPurify) return false;
+    const tex = (src, display) => {
+      if (!window.katex) return `<code>${escHtml(src)}</code>`;
+      // 원문 TeX를 담은 <annotation>은 거르는 과정에서 글자로 드러나므로 미리 뺀다
+      try { return katex.renderToString(src, { displayMode: display, output: "mathml", throwOnError: false, strict: "ignore" }).replace(/<annotation[\s\S]*?<\/annotation>/g, ""); }
+      catch { return `<code>${escHtml(src)}</code>`; }
+    };
+    marked.use({ gfm: true, breaks: true });
+    marked.use({ extensions: [
+      { name: "mathBlock", level: "block",
+        start(src){ const i = src.search(/\$\$|\\\[/); return i < 0 ? undefined : i; },
+        tokenizer(src){ const m = /^\$\$([\s\S]+?)\$\$/.exec(src) || /^\\\[([\s\S]+?)\\\]/.exec(src); if (m) return { type: "mathBlock", raw: m[0], text: m[1].trim() }; },
+        renderer(t){ return `<div class="math">${tex(t.text, true)}</div>`; } },
+      { name: "mathInline", level: "inline",
+        start(src){ const i = src.search(/\$|\\\(/); return i < 0 ? undefined : i; },
+        tokenizer(src){
+          let m = /^\$\$([\s\S]+?)\$\$/.exec(src);
+          if (m) return { type: "mathInline", raw: m[0], text: m[1].trim(), display: true };
+          m = /^\$(?!\s)((?:\\.|[^\\$\n])+?)(?<!\s)\$(?!\d)/.exec(src) || /^\\\(([\s\S]+?)\\\)/.exec(src);
+          if (m) return { type: "mathInline", raw: m[0], text: m[1] };
+        },
+        renderer(t){ return t.display ? `<span class="math">${tex(t.text, true)}</span>` : tex(t.text, false); } },
+    ]});
+    marked.use({ renderer: {
+      code(a, b){
+        const text = typeof a === "object" ? a.text : a;
+        const lang = String((typeof a === "object" ? a.lang : b) || "").trim().split(/\s/)[0].toLowerCase();
+        let html = escHtml(text);
+        if (window.hljs){
+          try { html = lang && hljs.getLanguage(lang) ? hljs.highlight(text, { language: lang, ignoreIllegals: true }).value : hljs.highlightAuto(text).value; } catch {}
+        }
+        return `<div class="code"><div class="codeHead"><span>${escHtml(lang || "code")}</span><button type="button" class="copy">복사</button></div><pre><code class="hljs">${html}</code></pre></div>`;
+      },
+    }});
+    DOMPurify.addHook("afterSanitizeAttributes", (n) => {
+      if (n.tagName === "A"){ n.setAttribute("target", "_blank"); n.setAttribute("rel", "noopener noreferrer"); }
+    });
+    return (this.ready = true);
+  },
+  // 서식이 필요한 글인지 (짧은 말은 지금처럼 단어씩 떠오르게)
+  looksRich(t){ return /```|\$[^$\s]|\\\(|\\\[|^\s*([-*+]|\d+\.)\s|^#{1,4}\s|\*\*[^*]+\*\*|\|.+\|.+\||`[^`]+`/m.test(t); },
+  render(t){
+    if (!this.setup()) return null;
+    const html = marked.parse(String(t));
+    return DOMPurify.sanitize(html, { USE_PROFILES: { html: true, mathMl: true }, ADD_TAGS: ["button"], ADD_ATTR: ["target", "type"] });
+  },
+};
+
+// 복사 버튼 (자막·로그 어디서든)
+document.addEventListener("click", async (e) => {
+  const b = e.target.closest?.(".code .copy"); if (!b) return;
+  const code = b.closest(".code").querySelector("pre").innerText;
+  try { await navigator.clipboard.writeText(code); b.textContent = "복사됨"; }
+  catch { const r = document.createRange(); r.selectNodeContents(b.closest(".code").querySelector("pre")); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); b.textContent = "Ctrl+C"; }
+  setTimeout(() => (b.textContent = "복사"), 1600);
+});
+
+// 읽어 줄 때는 화면용 서식을 걷어낸다
+function texToWords(t){
+  return String(t)
+    .replace(/\\frac\{([^{}]+)\}\{([^{}]+)\}/g, "$2분의 $1")
+    .replace(/\\sqrt\{([^{}]+)\}/g, "루트 $1")
+    .replace(/\^\{?2\}?/g, " 제곱").replace(/\^\{?3\}?/g, " 세제곱").replace(/\^\{([^{}]+)\}|\^(\w)/g, " $1$2제곱")
+    .replace(/_\{([^{}]+)\}|_(\w)/g, " $1$2")
+    .replace(/\\(times|cdot)/g, " 곱하기 ").replace(/\\div/g, " 나누기 ").replace(/\\pm/g, " 플러스마이너스 ")
+    .replace(/\\(le|leq)/g, " 이하 ").replace(/\\(ge|geq)/g, " 이상 ").replace(/\\(ne|neq)/g, " 같지 않음 ")
+    .replace(/\\pi/g, "파이").replace(/\\theta/g, "세타").replace(/\\alpha/g, "알파").replace(/\\beta/g, "베타").replace(/\\infty/g, "무한대").replace(/\\sum/g, "시그마").replace(/\\int/g, "적분")
+    .replace(/=/g, " 는 ").replace(/\\[a-zA-Z]+/g, " ").replace(/[{}\\]/g, " ").replace(/\s+/g, " ").trim();
+}
+function speakable(md){
+  let codeSaid = false, mathSaid = false;
+  return String(md)
+    .replace(/```[\s\S]*?(```|$)/g, () => codeSaid ? " " : (codeSaid = true, " 코드는 화면에 띄워 두었습니다. "))
+    .replace(/\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]/g, () => mathSaid ? " " : (mathSaid = true, " 식은 화면에 적어 두었습니다. "))
+    .replace(/\$((?:\\.|[^$\n])+?)\$|\\\((.+?)\\\)/g, (m, a, b) => " " + texToWords(a || b) + " ")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/^\s*\|?\s*:?-{2,}.*$/gm, "")
+    .replace(/\|/g, ", ")
+    .replace(/^\s{0,3}(#{1,6}|>|[-*+]|\d+\.)\s+/gm, "")
+    .replace(/[*_~#]/g, "")
+    .replace(/\n{2,}/g, "\n").trim();
+}
+
 function showReply(text, isErr=false){
-  const el = $("reply"); el.textContent = ""; el.classList.toggle("err", isErr);
+  const el = $("reply"); el.textContent = ""; el.classList.toggle("err", isErr); el.classList.remove("md");
+  if (!isErr && MD.looksRich(text)){
+    const html = MD.render(text);
+    if (html != null){
+      el.innerHTML = html; el.classList.add("md");
+      [...el.children].forEach((c, i) => { c.style.animationDelay = Math.min(i * 70, 700) + "ms"; });
+      return;
+    }
+  }
   if (reduce || isErr){ el.textContent = text; return; }
   const parts = text.split(/(\s+)/);
   let i = 0;
@@ -1219,7 +1439,10 @@ function showReply(text, isErr=false){
 function logLine(kind, who, text){
   const d = document.createElement("div"); d.className = "l " + kind;
   if (who){ const w = document.createElement("div"); w.className = "w"; w.textContent = who; d.append(w); }
-  const b = document.createElement("div"); b.textContent = text; d.append(b);
+  const b = document.createElement("div"); b.className = "b";
+  const html = kind === "j" && MD.looksRich(text) ? MD.render(text) : null;
+  if (html != null) b.innerHTML = html; else b.textContent = text;
+  d.append(b);
   const log = $("log"); log.append(d); while (log.children.length > 40) log.firstChild.remove();
   log.scrollTop = log.scrollHeight;
 }
@@ -1881,6 +2104,327 @@ $("fileInput").addEventListener("change", () => {
 vault.load();
 
 // ======================================================================
+//  할 일 목록 (웹: 이 브라우저, 데스크톱: 문서/Jarvis/todos.json)
+// ======================================================================
+const TODO_KEY = "jarvis.todos";
+const todoStore = isApp ? {
+  list: () => T.core.invoke("list_todos"),
+  add: (text, due) => T.core.invoke("todo_add", { text, due: due || "" }),
+  toggle: (id, done) => T.core.invoke("todo_toggle", { id, done }),
+  remove: (id) => T.core.invoke("todo_remove", { id }),
+  clearDone: () => T.core.invoke("todo_clear_done"),
+} : (() => {
+  const read = () => { try { const a = JSON.parse(localStorage.getItem(TODO_KEY) || "[]"); return Array.isArray(a) ? a : []; } catch { return []; } };
+  const write = (a) => { try { localStorage.setItem(TODO_KEY, JSON.stringify(a)); } catch { throw new Error("이 브라우저에 할 일을 저장할 수 없습니다."); } fire("todos-changed"); };
+  return {
+    list: async () => read(),
+    add: async (text, due) => {
+      text = String(text || "").trim().slice(0, 200); if (!text) throw new Error("할 일 내용이 비었습니다");
+      due = /^\d{4}-\d{2}-\d{2}$/.test(String(due || "")) ? due : "";
+      const t = { id: "t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), text, due, done: false, created: Date.now(), doneAt: 0 };
+      write([...read(), t]); return t;
+    },
+    toggle: async (id, done) => { const a = read(); const t = a.find(x => x.id === id); if (t){ t.done = done ?? !t.done; t.doneAt = t.done ? Date.now() : 0; write(a); } return t; },
+    remove: async (id) => write(read().filter(x => x.id !== id)),
+    clearDone: async () => write(read().filter(x => !x.done)),
+  };
+})();
+
+const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+function dueLabel(due){
+  if (!due) return null;
+  const today = ymd(new Date()), tm = ymd(new Date(Date.now() + 864e5));
+  if (due < today) return { t: "지남 · " + due.slice(5).replace("-", "."), c: "late" };
+  if (due === today) return { t: "오늘", c: "today" };
+  if (due === tm) return { t: "내일", c: "" };
+  const d = new Date(due + "T00:00:00");
+  return { t: `${d.getMonth() + 1}.${d.getDate()}(${"일월화수목금토"[d.getDay()]})`, c: "" };
+}
+const sortTodos = (a) => a.slice().sort((x, y) => (x.done - y.done) || ((x.due || "9999") < (y.due || "9999") ? -1 : (x.due || "9999") > (y.due || "9999") ? 1 : x.created - y.created));
+
+const narrowScreen = () => matchMedia("(max-width:720px)").matches;
+let todoOpen = (() => { try { const v = localStorage.getItem("jarvis.todoOpen"); return v == null ? !narrowScreen() : v === "1"; } catch { return !narrowScreen(); } })();
+let todoCache = [];
+
+async function renderTodos(){
+  try { todoCache = await todoStore.list(); } catch (e) { console.warn("[jarvis] 할 일 불러오기 실패", e); todoCache = []; }
+  const list = $("todoList"); list.textContent = "";
+  const items = sortTodos(todoCache), open = items.filter(t => !t.done).length;
+  $("todoCount").textContent = items.length ? `${open}개 남음` : "";
+  $("todoClear").hidden = !items.some(t => t.done);
+  if (!items.length){ const li = document.createElement("li"); li.className = "empty"; li.textContent = "\"할 일에 수학 숙제 추가해줘\"처럼 말해 보세요"; list.append(li); }
+  for (const t of items){
+    const li = document.createElement("li"); if (t.done) li.className = "done";
+    const ck = document.createElement("button"); ck.type = "button"; ck.className = "ck"; ck.textContent = t.done ? "✓" : "";
+    ck.setAttribute("aria-label", (t.done ? "다시 하기: " : "완료: ") + t.text);
+    ck.onclick = () => todoStore.toggle(t.id, !t.done).then(renderTodos);
+    const tx = document.createElement("span"); tx.className = "tx"; tx.textContent = t.text;
+    li.append(ck, tx);
+    const dl = dueLabel(t.due);
+    if (dl && !t.done){ const d = document.createElement("span"); d.className = "due " + dl.c; d.textContent = dl.t; li.append(d); }
+    const rm = document.createElement("button"); rm.type = "button"; rm.className = "rm"; rm.textContent = "✕"; rm.setAttribute("aria-label", "삭제: " + t.text);
+    rm.onclick = () => todoStore.remove(t.id).then(renderTodos);
+    li.append(rm); list.append(li);
+  }
+  $("todo").hidden = !todoOpen;
+  $("todoBtn").textContent = todoOpen ? "TO DO ✕" : (open ? `TO DO ${open}` : "TO DO");
+}
+function setTodoOpen(v){
+  todoOpen = !!v;
+  if (todoOpen && narrowScreen()) $("wx").hidden = true;   // 휴대폰에서는 카드 하나만
+  try { localStorage.setItem("jarvis.todoOpen", todoOpen ? "1" : "0"); } catch {}
+  renderTodos();
+}
+$("todoBtn").onclick = () => setTodoOpen(!todoOpen);
+$("todoHide").onclick = () => setTodoOpen(false);
+$("todoClear").onclick = () => todoStore.clearDone().then(renderTodos);
+$("todoForm").addEventListener("submit", async (e) => {
+  e.preventDefault(); const inp = $("todoInput"), v = inp.value.trim(); if (!v) return;
+  inp.value = ""; await todoStore.add(v, ""); renderTodos();
+});
+for (const ev of ["keydown", "keyup"]) $("todo").addEventListener(ev, (e) => e.stopPropagation());
+on("todos-changed", () => renderTodos());
+on("todo-panel", (v) => { if (v && typeof v === "object"){ if (v.auto && (todoOpen || narrowScreen())) return; setTodoOpen(!!v.open); } else setTodoOpen(!!v); });
+setInterval(renderTodos, 60 * 1000);   // 자정이 지나면 '오늘/내일' 표시를 바꾸기 위해
+renderTodos();
+
+function findTodo(q){
+  q = String(q || "").trim(); if (!q) return null;
+  const open = sortTodos(todoCache).filter(t => !t.done);
+  const n = q.match(/^(\d+)\s*번?$/); if (n) return open[+n[1] - 1] || null;
+  const lq = q.toLowerCase();
+  return todoCache.find(t => t.text.toLowerCase() === lq) || todoCache.find(t => t.text.toLowerCase().includes(lq) || lq.includes(t.text.toLowerCase())) || null;
+}
+
+// ======================================================================
+//  날씨 (Open-Meteo: 무료, 키 없음, 비상업 하루 약 1만 회)
+// ======================================================================
+const WMO = {
+  0: ["맑음", "☀"], 1: ["대체로 맑음", "☀"], 2: ["구름 조금", "☁"], 3: ["흐림", "☁"], 45: ["안개", "〰"], 48: ["짙은 안개", "〰"],
+  51: ["약한 이슬비", "☂"], 53: ["이슬비", "☂"], 55: ["강한 이슬비", "☂"], 56: ["어는 이슬비", "☂"], 57: ["어는 이슬비", "☂"],
+  61: ["약한 비", "☂"], 63: ["비", "☂"], 65: ["강한 비", "☔"], 66: ["어는 비", "☔"], 67: ["어는 비", "☔"],
+  71: ["약한 눈", "❄"], 73: ["눈", "❄"], 75: ["많은 눈", "❄"], 77: ["싸락눈", "❄"],
+  80: ["소나기", "☂"], 81: ["소나기", "☔"], 82: ["강한 소나기", "☔"], 85: ["눈 소나기", "❄"], 86: ["강한 눈 소나기", "❄"],
+  95: ["뇌우", "⚡"], 96: ["우박 동반 뇌우", "⚡"], 99: ["강한 우박 뇌우", "⚡"],
+};
+const wmo = (c) => { const w = WMO[c] || ["알 수 없음", "·"]; return [w[0], w[1] + "\uFE0E"]; };
+
+async function geocode(name){
+  const tries = [name, name.replace(/\s*(특별시|광역시|특별자치시|특별자치도|시|군|구|도|동|읍|면)$/, ""), name.split(/\s+/).pop()]
+    .map(s => s.trim()).filter((s, i, a) => s && a.indexOf(s) === i);
+  for (const q of tries){
+    let r;
+    try { r = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=10&language=ko&format=json`); }
+    catch { throw new Error("날씨 서버에 연결하지 못했습니다."); }
+    const v = await r.json().catch(() => ({}));
+    const rs = v.results || [];
+    if (!rs.length) continue;
+    const kr = /[가-힣]/.test(q) ? rs.filter(x => x.country_code === "KR") : [];
+    const best = (kr.length ? kr : rs).slice().sort((a, b) => (b.population || 0) - (a.population || 0))[0];
+    return { name: [best.admin1 && !best.admin1.startsWith(best.name) ? best.admin1 : "", best.name].filter(Boolean).join(" "), lat: best.latitude, lon: best.longitude };
+  }
+  throw new Error(`'${name}' 지역을 찾지 못했습니다. 시나 구 이름으로 다시 말씀해 주세요.`);
+}
+
+function deviceLocation(){
+  return new Promise((ok, no) => {
+    if (!navigator.geolocation) return no(new Error("이 기기는 위치를 알려 주지 않습니다. SETTINGS에 날씨 기본 지역을 넣어 주세요."));
+    navigator.geolocation.getCurrentPosition(
+      (p) => ok({ name: "현재 위치", lat: p.coords.latitude, lon: p.coords.longitude }),
+      (e) => no(new Error(e.code === 1 ? "위치 권한이 없습니다. 지역 이름을 말씀하시거나 SETTINGS에 날씨 기본 지역을 넣어 주세요." : "위치를 알아내지 못했습니다. 지역 이름을 말씀해 주세요.")),
+      { timeout: 9000, maximumAge: 30 * 60 * 1000 });
+  });
+}
+
+async function fetchWeather(loc){
+  const u = `https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lon}`
+    + `&current=temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,weather_code,wind_speed_10m`
+    + `&hourly=precipitation_probability&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max`
+    + `&timezone=auto&forecast_days=4&wind_speed_unit=ms`;
+  let r;
+  try { r = await fetch(u); } catch { throw new Error("날씨 서버에 연결하지 못했습니다."); }
+  const v = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error("날씨를 가져오지 못했습니다: " + (v.reason || r.status));
+  const c = v.current || {}, d = v.daily || {}, h = v.hourly || {};
+  const nowIdx = Math.max(0, (h.time || []).findIndex(t => t >= String(c.time || "").slice(0, 13)));
+  const next = (h.precipitation_probability || []).slice(nowIdx, nowIdx + 12);
+  const peak = next.length ? Math.max(...next) : null;
+  const peakAt = peak != null ? (h.time[nowIdx + next.indexOf(peak)] || "").slice(11, 16) : null;
+  const round = (x) => x == null ? null : Math.round(x);
+  return {
+    place: loc.name,
+    now: { temp: round(c.temperature_2m), feels: round(c.apparent_temperature), humidity: c.relative_humidity_2m, wind: c.wind_speed_10m, precip: c.precipitation, code: c.weather_code, desc: wmo(c.weather_code)[0] },
+    days: (d.time || []).map((t, i) => ({ date: t, code: d.weather_code[i], desc: wmo(d.weather_code[i])[0], max: round(d.temperature_2m_max[i]), min: round(d.temperature_2m_min[i]), rain: d.precipitation_probability_max?.[i] ?? null })),
+    rainNext12h: peak != null ? { maxProb: peak, at: peakAt } : null,
+  };
+}
+
+async function getWeather(place){
+  let loc;
+  if (place && String(place).trim()) loc = await geocode(String(place).trim());
+  else if (cfg.city) loc = cfg.cityGeo?.q === cfg.city ? cfg.cityGeo : { ...(await geocode(cfg.city)), q: cfg.city };
+  else loc = await deviceLocation();
+  if (!place && cfg.city && cfg.cityGeo?.q !== cfg.city){ cfg.cityGeo = loc; saveCfg(); }
+  const w = await fetchWeather(loc);
+  showWeather(w);
+  return w;
+}
+
+function showWeather(w){
+  const [desc, sym] = wmo(w.now.code);
+  $("wxPlace").textContent = w.place;
+  $("wxSym").textContent = sym;
+  $("wxTemp").textContent = (w.now.temp ?? "–") + "°";
+  $("wxDesc").innerHTML = "";
+  $("wxDesc").append(desc, Object.assign(document.createElement("small"), { textContent: `체감 ${w.now.feels ?? "–"}° · ${w.days[0] ? `${w.days[0].max}° / ${w.days[0].min}°` : ""}` }));
+  const facts = $("wxFacts"); facts.textContent = "";
+  for (const [k, v] of [["습도", (w.now.humidity ?? "–") + "%"], ["바람", (w.now.wind != null ? w.now.wind.toFixed(1) : "–") + "m/s"], ["비 (12시간)", w.rainNext12h ? w.rainNext12h.maxProb + "%" : "–"]]){
+    const d = document.createElement("div"); d.append(k, Object.assign(document.createElement("b"), { textContent: v })); facts.append(d);
+  }
+  const days = $("wxDays"); days.textContent = "";
+  w.days.forEach((d, i) => {
+    const el = document.createElement("div");
+    const dt = new Date(d.date + "T00:00:00");
+    el.append(Object.assign(document.createElement("span"), { textContent: i === 0 ? "오늘" : i === 1 ? "내일" : `${dt.getMonth() + 1}.${dt.getDate()}(${"일월화수목금토"[dt.getDay()]})` }),
+      Object.assign(document.createElement("i"), { textContent: wmo(d.code)[1], title: d.desc }),
+      `${d.max}° ${d.min}°`, Object.assign(document.createElement("em"), { textContent: d.rain != null ? ` ${d.rain}%` : "" }));
+    days.append(el);
+  });
+  $("wx").hidden = false;
+  if (narrowScreen() && todoOpen){ todoOpen = false; renderTodos(); }
+  $("stWx").textContent = `${w.now.temp}° ${desc}`;
+}
+$("wxClose").onclick = () => { $("wx").hidden = true; };
+on("weather", (w) => { if (w?.now) showWeather(w); });
+
+// 기본 지역이 있으면 상단에 현재 날씨를 30분마다 갱신 (위치 권한은 묻지 않는다)
+async function refreshWxStatus(){
+  if (!cfg.city) { $("stWx").textContent = "—"; return; }
+  try {
+    const loc = cfg.cityGeo?.q === cfg.city ? cfg.cityGeo : { ...(await geocode(cfg.city)), q: cfg.city };
+    cfg.cityGeo = loc; saveCfg();
+    const w = await fetchWeather(loc);
+    $("stWx").textContent = `${w.now.temp}° ${w.now.desc}`;
+  } catch (e) { $("stWx").textContent = "—"; console.warn("[jarvis] 날씨 갱신 실패", e); }
+}
+refreshWxStatus(); setInterval(refreshWxStatus, 30 * 60 * 1000);
+
+// ======================================================================
+//  배경음: Web Audio로 실시간 합성 (저작권 없는 생성음)
+//   깊은 화음 패드 + 성간풍 같은 바람 + 가끔 울리는 맑은 종소리, 긴 잔향.
+//   분위기(mood)에 따라 화음이 천천히 바뀌고, 듣는 중·말하는 중에는 소리를 줄인다.
+// ======================================================================
+const ambient = (() => {
+  const CHORDS = {
+    calm:   [73.42, 110.00, 146.83, 164.81, 220.00],   // D 서스·add9
+    nebula: [65.41,  98.00, 146.83, 185.00, 246.94],   // C 리디안
+    focus:  [82.41, 123.47, 164.81, 185.00, 246.94],   // E 열린 5도
+    alert:  [55.00,  82.41, 110.00, 130.81, 155.56],   // A 단조 + 트라이톤
+  };
+  const BELLS = {
+    calm:   [587.33, 659.25, 880.00, 987.77, 1174.66],
+    nebula: [523.25, 587.33, 739.99, 987.77, 1174.66],
+    focus:  [659.25, 739.99, 987.77, 1318.51, 1479.98],
+    alert:  [440.00, 523.25, 622.25, 880.00, 1046.50],
+  };
+  const DUCK = { idle: 1, thinking: 0.8, speaking: 0.4, listening: 0.08 };
+  let ctx = null, master = null, rev = null, voices = [], bellTimer = 0, on = false, duck = 1, m = "calm";
+  let vol = (cfg.ambVol ?? 45) / 100;
+
+  function impulse(sec){
+    const len = Math.floor(ctx.sampleRate * sec), b = ctx.createBuffer(2, len, ctx.sampleRate);
+    for (let ch = 0; ch < 2; ch++){ const d = b.getChannelData(ch); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3.4); }
+    return b;
+  }
+  function lfo(freq, amount, target){
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.frequency.value = freq; g.gain.value = amount; o.connect(g); g.connect(target); o.start();
+  }
+  function build(){
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    master = ctx.createGain(); master.gain.value = 0;
+    const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -26; comp.ratio.value = 3;
+    master.connect(comp); comp.connect(ctx.destination);
+    rev = ctx.createConvolver(); rev.buffer = impulse(7.5);
+    const wet = ctx.createGain(); wet.gain.value = 0.9; rev.connect(wet); wet.connect(master);
+    const dry = ctx.createGain(); dry.gain.value = 0.3; dry.connect(master);
+
+    CHORDS.calm.forEach((f, i, arr) => {
+      const base = 0.055 / (1 + i * 0.3);
+      const g = ctx.createGain(); g.gain.value = base;
+      const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 420 + i * 140; lp.Q.value = 0.8;
+      const pan = ctx.createStereoPanner(); pan.pan.value = (i / (arr.length - 1)) * 1.2 - 0.6;
+      const o1 = ctx.createOscillator(); o1.type = i < 2 ? "sine" : "triangle"; o1.frequency.value = f;
+      const o2 = ctx.createOscillator(); o2.type = "sine"; o2.frequency.value = f; o2.detune.value = 6 + i * 2.5;
+      o1.connect(lp); o2.connect(lp); lp.connect(g); g.connect(pan); pan.connect(dry); pan.connect(rev);
+      o1.start(); o2.start();
+      lfo(0.021 + i * 0.013, base * 0.7, g.gain);         // 숨 쉬듯 커졌다 작아짐
+      lfo(0.013 + i * 0.007, 260 + i * 60, lp.frequency); // 음색이 천천히 열렸다 닫힘
+      lfo(0.008 + i * 0.004, 0.35, pan.pan);              // 좌우로 떠다님
+      voices.push({ o1, o2 });
+    });
+
+    // 바람: 걸러낸 잡음이 아주 천천히 높낮이를 바꾼다
+    const nb = ctx.createBuffer(1, ctx.sampleRate * 3, ctx.sampleRate), nd = nb.getChannelData(0);
+    for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+    const ns = ctx.createBufferSource(); ns.buffer = nb; ns.loop = true;
+    const bp = ctx.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 700; bp.Q.value = 1.4;
+    const ng = ctx.createGain(); ng.gain.value = 0.018;
+    ns.connect(bp); bp.connect(ng); ng.connect(rev); ng.connect(dry); ns.start();
+    lfo(0.017, 450, bp.frequency); lfo(0.031, 0.012, ng.gain);
+  }
+  function bell(){
+    if (!on || !ctx) return;
+    const notes = BELLS[m], f = notes[Math.floor(Math.random() * notes.length)] * (Math.random() < 0.25 ? 2 : 1);
+    const t = ctx.currentTime;
+    for (const [mult, amp] of [[1, 0.05], [2.01, 0.018], [3.02, 0.008]]){
+      const o = ctx.createOscillator(), g = ctx.createGain(), p = ctx.createStereoPanner();
+      o.frequency.value = f * mult; p.pan.value = Math.random() * 1.6 - 0.8;
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(amp, t + 0.03); g.gain.exponentialRampToValueAtTime(0.0001, t + 5.5);
+      o.connect(g); g.connect(p); p.connect(rev); o.start(t); o.stop(t + 5.6);
+    }
+    bellTimer = setTimeout(bell, 3500 + Math.random() * 6500);
+  }
+  const level = () => (on ? vol * 0.55 * duck : 0);
+  function apply(tc = 1.2){ if (ctx) master.gain.setTargetAtTime(level(), ctx.currentTime, tc); }
+
+  return {
+    get on(){ return on; },
+    async start(){
+      if (on) return; on = true;
+      if (!ctx) build();
+      try { await ctx.resume(); } catch {}
+      this.setMood(m, 0.01); apply(1.6);
+      clearTimeout(bellTimer); bellTimer = setTimeout(bell, 2500);
+    },
+    stop(){
+      on = false; clearTimeout(bellTimer); apply(0.6);
+      setTimeout(() => { if (!on && ctx) ctx.suspend().catch(() => {}); }, 3000);
+    },
+    setMood(mood, tc = 3){
+      m = CHORDS[mood] ? mood : "calm";
+      if (!ctx) return;
+      CHORDS[m].forEach((f, i) => { const v = voices[i]; if (!v) return; v.o1.frequency.setTargetAtTime(f, ctx.currentTime, tc); v.o2.frequency.setTargetAtTime(f, ctx.currentTime, tc); });
+    },
+    setVolume(v){ vol = Math.max(0, Math.min(1, v)); apply(0.3); },
+    duckFor(mode){ duck = DUCK[mode] ?? 1; apply(mode === "listening" ? 0.15 : 0.9); },
+  };
+})();
+
+let ambientWanted = (() => { try { return localStorage.getItem("jarvis.ambient") !== "off"; } catch { return true; } })();
+function syncAmbBtn(){ $("ambBtn").textContent = ambientWanted ? "AMBIENT ON" : "AMBIENT OFF"; }
+syncAmbBtn();
+$("ambBtn").onclick = () => {
+  ambientWanted = !ambientWanted; syncAmbBtn();
+  try { localStorage.setItem("jarvis.ambient", ambientWanted ? "on" : "off"); } catch {}
+  ambientWanted ? ambient.start() : ambient.stop();
+};
+// 소리는 사용자가 처음 화면을 누르거나 키를 친 뒤에만 낼 수 있다
+const ambKick = (e) => { if (!e.isTrusted) return; removeEventListener("pointerdown", ambKick, true); removeEventListener("keydown", ambKick, true); if (ambientWanted) ambient.start(); };
+addEventListener("pointerdown", ambKick, true); addEventListener("keydown", ambKick, true);
+on("hologram", (mm) => ambient.setMood(mm));
+
+// ======================================================================
 //  대화
 // ======================================================================
 let busy = false;
@@ -1919,7 +2463,7 @@ async function ask(text){
       $("reply").append(document.createElement("br"), a);
     }
     document.querySelector(".caption").scrollTop = 0;
-    speak(reply);
+    speak(speakable(reply));
   }catch(e){
     showReply(String(e), true); logLine("tool", "", "오류: " + e); setMode("idle");
   }finally{
@@ -1957,10 +2501,10 @@ mic.addEventListener("pointerdown", (e) => { e.preventDefault(); mic.setPointerC
 mic.addEventListener("pointerup", () => pttUp("pointer"));
 mic.addEventListener("pointercancel", () => pttUp("pointer"));
 addEventListener("keydown", (e) => {
-  if (e.code !== "Space" || e.repeat || e.target === $("box")) return;
+  if (e.code !== "Space" || e.repeat || e.target.closest?.("input, textarea, select, [contenteditable]")) return;
   e.preventDefault(); pttDown("key");
 });
-addEventListener("keyup", (e) => { if (e.code === "Space" && e.target !== $("box")) { e.preventDefault(); pttUp("key"); } });
+addEventListener("keyup", (e) => { if (e.code === "Space" && !e.target.closest?.("input, textarea, select, [contenteditable]")) { e.preventDefault(); pttUp("key"); } });
 addEventListener("blur", () => pttUp("key"));
 
 // ======================================================================
@@ -2123,7 +2667,7 @@ try { if (localStorage.getItem("jarvis.hand") === "on") startHand(); } catch {}
 on("mic-level", (v) => { micLevel = Math.max(0, Math.min(1, +v || 0)); });
 on("hologram", (m) => { if (PALETTES[m]) mood = m; });
 on("tool", (p) => logLine("tool", "", "▸ " + (String(p?.name).startsWith("fallback:") ? "바쁜 모델 대신 " + p.name.slice(9) + " 사용" : (TOOL_NAMES[p?.name] || p?.name))));
-const TOOL_NAMES = { get_datetime:"시각 확인", open_app:"프로그램 실행", open_url:"브라우저 열기", set_volume:"볼륨 조절", set_timer:"타이머 설정", set_hologram:"홀로그램 전환", create_file:"파일 만들기", read_file:"첨부 파일 읽기", open_file_picker:"파일 선택 창", show_file:"파일 다시 보기", remember:"기록하기", recall:"기록 찾기", show_memory:"기록 화면" };
+const TOOL_NAMES = { get_datetime:"시각 확인", open_app:"프로그램 실행", open_url:"브라우저 열기", set_volume:"볼륨 조절", set_timer:"타이머 설정", set_hologram:"홀로그램 전환", create_file:"파일 만들기", read_file:"첨부 파일 읽기", open_file_picker:"파일 선택 창", show_file:"파일 다시 보기", add_todo:"할 일 추가", list_todos:"할 일 확인", complete_todo:"할 일 완료", remove_todo:"할 일 삭제", show_todos:"할 일 카드", get_weather:"날씨 확인", remember:"기록하기", recall:"기록 찾기", show_memory:"기록 화면" };
 
 const timers = new Map();
 on("timer-set", ({id, label, seconds}) => {
@@ -2407,6 +2951,7 @@ async function refreshStatus(greet = true){
     return;
   }
   document.body.classList.add("app"); $("settingsBtn").hidden = false;
+  if (cfg.city) T.core.invoke("set_city", { city: cfg.city }).catch(() => {});
   try{
     const s = await api.status();
     const b = $("stBrain"), e = $("stEar");
@@ -2433,6 +2978,7 @@ function syncKeyFields(){
     : "처음 말할 때 모델을 한 번 내려받고, 이후에는 브라우저에 저장된 것을 씁니다. 음성은 기기 밖으로 나가지 않습니다.";
 }
 $("cfgModel").addEventListener("change", syncKeyFields);
+$("cfgAmb").addEventListener("input", (e) => ambient.setVolume(+e.target.value / 100));
 $("cfgWhisper").addEventListener("change", syncKeyFields);
 const formKey = (prov) => ({ groq: $("cfgGroqKey"), gemini: $("cfgGeminiKey"), claude: $("cfgKey") })[prov].value.trim();
 const keyShape = (k) => k.startsWith("gsk_") ? "Groq 형식(gsk_)" : k.startsWith("AQ.") ? "Google 새 형식(AQ.)" : k.startsWith("AIza") ? "Google 기존 형식(AIza)" : k.startsWith("sk-ant-") ? "Anthropic 형식" : "알 수 없는 형식";
@@ -2505,14 +3051,14 @@ $("testMicBtn").onclick = async () => {
   }
 };
 function openSettings(){
-  $("cfgTts").value = cfg.tts;
+  $("cfgTts").value = cfg.tts; $("cfgCity").value = cfg.city || ""; $("cfgAmb").value = cfg.ambVol ?? 45;
   $("cfgModel").value = cfg.brain; $("cfgGroqKey").value = cfg.groqKey; $("cfgGeminiKey").value = cfg.geminiKey; $("cfgKey").value = cfg.apiKey; $("cfgWhisper").value = cfg.whisper;
   syncKeyFields(); panel.hidden = false; $("diagOut").hidden = true;
   if (!isApp) ({ groq: $("cfgGroqKey"), gemini: $("cfgGeminiKey"), claude: $("cfgKey") })[BRAINS[cfg.brain].provider].focus();
 }
 function closeSettings(){ panel.hidden = true; }
 $("settingsBtn").onclick = openSettings;
-$("cfgCancel").onclick = closeSettings;
+$("cfgCancel").onclick = () => { ambient.setVolume((cfg.ambVol ?? 45) / 100); closeSettings(); };
 panel.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSettings(); e.stopPropagation(); });
 panel.addEventListener("keyup", (e) => e.stopPropagation());
 $("cfgForm").addEventListener("submit", (e) => {
@@ -2520,6 +3066,9 @@ $("cfgForm").addEventListener("submit", (e) => {
   const whisperChanged = cfg.whisper !== $("cfgWhisper").value;
   cfg.brain = $("cfgModel").value; cfg.groqKey = $("cfgGroqKey").value.trim(); cfg.geminiKey = $("cfgGeminiKey").value.trim(); cfg.apiKey = $("cfgKey").value.trim();
   cfg.whisper = $("cfgWhisper").value;
+  const cityChanged = (cfg.city || "") !== $("cfgCity").value.trim();
+  cfg.city = $("cfgCity").value.trim(); cfg.ambVol = +$("cfgAmb").value;
+  if (cityChanged){ cfg.cityGeo = null; refreshWxStatus(); if (isApp) T.core.invoke("set_city", { city: cfg.city }).catch(() => {}); }
   const ttsChanged = cfg.tts !== $("cfgTts").value;
   cfg.tts = $("cfgTts").value;
   saveCfg();
@@ -2559,6 +3108,8 @@ uniform vec2 uRes, uCenter;
 uniform float uTime, uEnergy, uLevel, uSpeak, uRadius;
 uniform vec3 uColA, uColB, uColC;
 uniform vec2 uLook;   // 마우스/손 방향 (-1..1)
+uniform vec4 uPassA[3];   // 지나가는 위성: 시작 xy, 끝 xy (uv 좌표)
+uniform vec3 uPassB[3];   // 진행률 0..1, 밝기, 번쩍임 세기
 
 float hash(vec2 p){ p = fract(p*vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x*p.y); }
 float noise(vec2 p){
@@ -2612,6 +3163,26 @@ void main(){
   col += uColC*pow(w3, 4.2)*.45;
   col *= 1. - .6*dot(uv, uv);
   col += stars(bg, t);
+
+  // 아주 멀리 하늘을 가로지르는 인공위성: 작은 빛점 + 희미한 꼬리 + 점멸, 가끔 태양광 반사로 번쩍. 구체 뒤로 가면 가려진다
+  for (int i = 0; i < 3; i++){
+    vec3 B = uPassB[i];
+    if (B.y <= 0.) continue;
+    vec4 A = uPassA[i];
+    vec2 dir = normalize(A.zw - A.xy);
+    vec2 sp = mix(A.xy, A.zw, B.x) - uLook*.018;
+    vec2 q = uv - sp;
+    float along = dot(q, dir), perp = dot(q, vec2(-dir.y, dir.x));
+    float core = exp(-dot(q, q)*90000.);
+    float trail = exp(-perp*perp*5.0e5)*smoothstep(-.085, 0., along)*step(along, 0.);
+    float blink = .5 + .5*step(.8, fract(t*.75 + float(i)*.37));
+    float flare = B.z*exp(-pow((B.x - .52)*11., 2.));
+    vec2 spx = sp*uRes.y + .5*uRes;
+    float occ = smoothstep(.97, 1.05, length(spx - uCenter)/(uRadius*uRes.y));
+    float fade = smoothstep(0., .05, B.x)*(1. - smoothstep(.95, 1., B.x));
+    vec3 sc = mix(vec3(.86, .93, 1.), uColA, .25);
+    col += sc*(core*(.75*blink + flare*3.5) + trail*.22 + exp(-dot(q, q)*5000.)*flare*.6)*B.y*occ*fade;
+  }
 
   // 외곽 헤일로
   float halo = exp(-max(r - 1., 0.)*3.)*(.22 + .45*uEnergy + .35*uLevel);
@@ -2770,6 +3341,28 @@ addEventListener("resize", resize); resize();
 const S = { energy:.25, level:0, speak:0, radius:.17, A:[...PALETTES.calm[0]], B:[...PALETTES.calm[1]], C:[...PALETTES.calm[2]] };
 const ease = (x, target, rate, dt) => x + (target - x)*(1 - Math.exp(-rate*dt));
 
+// 지나가는 위성 일정: 7~20초마다 하나씩, 16~30초에 걸쳐 화면을 가로지른다
+const passers = [null, null, null], passA = new Float32Array(12), passB = new Float32Array(9);
+let nextPass = performance.now() + 3000;
+function spawnPasser(now){
+  const slot = passers.findIndex(p => !p); if (slot < 0) return;
+  const aspect = W / H, L = 0.5 * Math.hypot(aspect, 1) + 0.06;
+  const ang = Math.random() * Math.PI * 2, off = (Math.random() - 0.5) * 0.7;
+  const dx = Math.cos(ang), dy = Math.sin(ang), px = -dy * off, py = dx * off;
+  passers[slot] = { a: [px - dx * L, py - dy * L, px + dx * L, py + dy * L], start: now, dur: 16000 + Math.random() * 14000,
+    bright: 0.55 + Math.random() * 0.45, flare: Math.random() < 0.35 ? 0.6 + Math.random() * 0.4 : 0 };
+}
+function updatePassers(now){
+  if (now > nextPass){ spawnPasser(now); nextPass = now + (reduce ? 20000 : 7000) + Math.random() * 13000; }
+  for (let i = 0; i < 3; i++){
+    const p = passers[i];
+    if (p && now - p.start > p.dur) passers[i] = null;
+    const q = passers[i];
+    passA.set(q ? q.a : [0, 0, 1, 0], i * 4);
+    passB.set(q ? [(now - q.start) / q.dur, q.bright, q.flare] : [0, 0, 0], i * 3);
+  }
+}
+
 let captionTop = Infinity;
 const capEl = document.querySelector(".caption");
 const updCap = () => { const r = capEl.getBoundingClientRect(); captionTop = capEl.textContent.trim() ? r.top : Infinity; };
@@ -2823,6 +3416,8 @@ function frame(now){
   gl.uniform1f(su.uSpeak, S.speak); gl.uniform1f(su.uRadius, S.radius);
   gl.uniform3fv(su.uColA, S.A); gl.uniform3fv(su.uColB, S.B); gl.uniform3fv(su.uColC, S.C);
   gl.uniform2f(su.uLook, look.x, look.y);
+  updatePassers(now);
+  if (su["uPassA[0]"]){ gl.uniform4fv(su["uPassA[0]"], passA); gl.uniform3fv(su["uPassB[0]"], passB); }
   gl.drawArrays(gl.TRIANGLES, 0, 3);
 
   gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);

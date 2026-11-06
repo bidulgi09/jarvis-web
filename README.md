@@ -17,6 +17,11 @@
 | **파일 위성** | 첨부한 파일이 브라우저(IndexedDB)에 최근 24개까지 남고, 최근 12개가 종류별 색의 위성으로 구체 주위를 돎. 누르거나 "아까 올린 PDF 다시 보여줘"라고 하면 뷰어(원본·글 내용·다시 첨부·삭제)가 열림 | 같은 화면이라 동일 |
 | **음성으로 파일 창 열기** | "파일 올릴게", "PDF 올릴 테니까 요약해줘" → 받아쓰기가 끝나자마자 파일 선택 창을 엶. 고르면 그 질문으로 바로 보냄. 브라우저가 막으면 '파일 고르기' 버튼 | 동일 |
 | **새 탭 우회** | 링크를 열 것 같은 말이면 말을 마친 순간 빈 탭을 미리 열고("찾는 중" 화면), 답이 오면 그 탭을 주소로 보냄. 필요 없으면 닫음. 그래서 두뇌가 몇 초 걸려도 탭이 열림 | 기본 브라우저로 바로 열림 |
+| **답변 서식** | 마크다운(marked), LaTeX 수식(KaTeX, `$…$`·`$$…$$`·`\(…\)`), 언어별 색이 입혀진 코드 상자(highlight.js)와 복사 버튼. 모델 출력은 DOMPurify로 거른 뒤 표시. 읽어 줄 때는 서식을 걷어내고 수식은 "b 제곱"처럼 풀어 읽음 | 같은 화면이라 동일 |
+| **할 일 (TO DO)** | "내일까지 보고서 추가해줘", "2번 끝냈어" → `add_todo`·`complete_todo`·`remove_todo`. 오른쪽 카드에서 직접 추가·체크·삭제, 마감일 표시(오늘·지남). 이 브라우저에 저장 | 문서/Jarvis/todos.json |
+| **날씨** | "대구 날씨 어때" → [Open-Meteo](https://open-meteo.com) (무료, 키 필요 없음)로 현재 날씨·4일 예보·12시간 강수 확률 카드. 지역을 안 말하면 SETTINGS의 기본 지역, 없으면 기기 위치. 상태 줄에 30분마다 갱신 | 같은 API를 Rust에서 호출, 기본 지역은 settings.json 또는 `JARVIS_CITY` |
+| **배경음** | Web Audio로 실시간 합성하는 우주 패드·성간풍·종소리 (저작권 없는 생성음). 홀로그램 분위기에 따라 화음이 바뀌고, 듣는 중·말하는 중에는 작아짐. AMBIENT 버튼, SETTINGS에서 음량 | 동일 |
+| **지나가는 위성** | 7~20초마다 먼 인공위성이 하늘을 천천히 가로지름 (점멸, 희미한 꼬리, 가끔 태양광 반사로 번쩍). 구체 뒤로 지나가면 가려짐 | 동일 |
 | **모바일** | 키보드가 올라와도 입력창이 가려지지 않음, 터치 버튼 크기 확대, 긴 답변은 자막 안에서 스크롤되고 구체가 위로 비켜 줌 | |
 
 목소리는 SETTINGS → 목소리에서 남성 1~5, 여성 1~5, 브라우저 기본 음성 중 고를 수 있고, **목소리 듣기**로 바로 확인할 수 있습니다.
@@ -68,7 +73,9 @@ WebGPU로 Whisper를 불러오거나 돌리다 실패하면 자동으로 CPU(WAS
 | `src-tauri/src/audio.rs` | 누르고 있는 동안 녹음, 16kHz 모노 변환, 40ms마다 볼륨을 홀로그램에 전달 |
 | `src-tauri/src/stt.rs` | Whisper 모델을 한 번만 올려 재사용, 한국어 받아쓰기, 무음 환각 문구 필터 |
 | `src-tauri/src/brain.rs` | Groq(OpenAI 호환) / Gemini generateContent / Claude Messages API, 도구 호출 루프 (최대 6회), 대화 기록 관리 |
-| `src-tauri/src/tools.rs` | `open_app`(apps.json 화이트리스트만), `open_url`, `set_volume`, `set_timer`, `set_hologram`, `get_datetime` |
+| `src-tauri/src/tools.rs` | `open_app`(apps.json 화이트리스트만), `open_url`, `set_volume`, `set_timer`, `set_hologram`, `get_datetime`, 파일·기록·할 일·날씨 도구 |
+| `src-tauri/src/todo.rs` | 할 일 저장소 (todos.json, 웹과 같은 형식) |
+| `src-tauri/src/weather.rs` | Open-Meteo 지오코딩 + 예보를 화면과 같은 JSON으로 정리 |
 | `ui/index.html` | 우주 홀로그램 (성운 fbm 셰이더, 중력 렌즈, 홀로그램 구체, 궤도 링, 입자 원반 2,600개) |
 
 ### 홀로그램이 부드러운 이유

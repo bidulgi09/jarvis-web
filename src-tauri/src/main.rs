@@ -5,7 +5,9 @@ mod audio;
 mod brain;
 mod memory;
 mod stt;
+mod todo;
 mod tools;
+mod weather;
 
 use serde::Serialize;
 use std::path::{Path, PathBuf};
@@ -109,6 +111,84 @@ fn delete_memory(app: AppHandle, state: State<'_, AppState>, id: String) -> Resu
     Ok(())
 }
 
+// ---------- 할 일 카드 (화면에서 직접 고칠 때) ----------
+
+fn todos_changed(app: &AppHandle) {
+    let _ = tauri::Emitter::emit(app, "todos-changed", ());
+}
+
+#[tauri::command]
+fn list_todos(state: State<'_, AppState>) -> Vec<todo::Todo> {
+    state.brain.toolbox().todos.sorted()
+}
+
+#[tauri::command]
+fn todo_add(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    text: String,
+    due: String,
+) -> Result<todo::Todo, String> {
+    let t = state
+        .brain
+        .toolbox()
+        .todos
+        .add(&text, &due)
+        .map_err(|e| format!("{e:#}"))?;
+    todos_changed(&app);
+    Ok(t)
+}
+
+#[tauri::command]
+fn todo_toggle(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+    done: Option<bool>,
+) -> Result<Option<todo::Todo>, String> {
+    let t = state
+        .brain
+        .toolbox()
+        .todos
+        .toggle(&id, done)
+        .map_err(|e| format!("{e:#}"))?;
+    todos_changed(&app);
+    Ok(t)
+}
+
+#[tauri::command]
+fn todo_remove(app: AppHandle, state: State<'_, AppState>, id: String) -> Result<(), String> {
+    state
+        .brain
+        .toolbox()
+        .todos
+        .remove(&id)
+        .map_err(|e| format!("{e:#}"))?;
+    todos_changed(&app);
+    Ok(())
+}
+
+#[tauri::command]
+fn todo_clear_done(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    state
+        .brain
+        .toolbox()
+        .todos
+        .clear_done()
+        .map_err(|e| format!("{e:#}"))?;
+    todos_changed(&app);
+    Ok(())
+}
+
+#[tauri::command]
+fn set_city(state: State<'_, AppState>, city: String) -> Result<(), String> {
+    state
+        .brain
+        .toolbox()
+        .set_city(&city)
+        .map_err(|e| format!("{e:#}"))
+}
+
 #[tauri::command]
 async fn reset(state: State<'_, AppState>) -> Result<(), String> {
     state.brain.reset().await;
@@ -166,7 +246,13 @@ fn main() {
             ask,
             reset,
             list_memories,
-            delete_memory
+            delete_memory,
+            list_todos,
+            todo_add,
+            todo_toggle,
+            todo_remove,
+            todo_clear_done,
+            set_city
         ])
         .run(tauri::generate_context!())
         .expect("자비스를 시작하지 못했습니다");

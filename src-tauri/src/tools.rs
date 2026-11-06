@@ -3,11 +3,13 @@
 //! 파일은 문서/Jarvis 폴더 안에만 만든다 (다른 곳의 파일을 덮어쓰지 못하게).
 
 use crate::memory::Memory;
+use crate::todo::Todos;
 use anyhow::{bail, Context, Result};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::Mutex;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 
@@ -15,6 +17,10 @@ pub struct Toolbox {
     apps: BTreeMap<String, String>,
     files_dir: PathBuf,
     pub memory: Memory,
+    pub todos: Todos,
+    http: reqwest::Client,
+    /// 날씨 기본 지역 (화면 SETTINGS에서 바꾸면 settings.json에 저장)
+    city: Mutex<String>,
 }
 
 /// 문서/Jarvis (윈도우: %USERPROFILE%\Documents\Jarvis, 맥·리눅스: ~/Documents/Jarvis)
@@ -37,11 +43,40 @@ impl Toolbox {
             .and_then(|s| serde_json::from_str::<BTreeMap<String, String>>(&s).ok())
             .unwrap_or_else(default_apps);
         let dir = jarvis_dir();
+        let city = std::env::var("JARVIS_CITY")
+            .ok()
+            .filter(|c| !c.trim().is_empty())
+            .or_else(|| {
+                std::fs::read_to_string(dir.join("settings.json"))
+                    .ok()
+                    .and_then(|s| serde_json::from_str::<Value>(&s).ok())
+                    .and_then(|v| v["city"].as_str().map(String::from))
+            })
+            .unwrap_or_default();
         Self {
             apps,
             memory: Memory::load(dir.join("memory.json")),
+            todos: Todos::load(dir.join("todos.json")),
+            http: reqwest::Client::builder()
+                .timeout(Duration::from_secs(15))
+                .build()
+                .unwrap_or_default(),
+            city: Mutex::new(city),
             files_dir: dir,
         }
+    }
+
+    pub fn set_city(&self, city: &str) -> Result<()> {
+        let city = city.trim().chars().take(40).collect::<String>();
+        if let Ok(mut c) = self.city.lock() {
+            *c = city.clone();
+        }
+        std::fs::create_dir_all(&self.files_dir)?;
+        std::fs::write(
+            self.files_dir.join("settings.json"),
+            serde_json::to_vec_pretty(&json!({ "city": city }))?,
+        )
+        .context("설정을 저장하지 못했습니다")
     }
 
     pub fn app_names(&self) -> Vec<&str> {
@@ -163,6 +198,40 @@ pub fn schemas(tb: &Toolbox) -> Value {
             "name": "show_file",
             "description": "예전에 첨부한 파일을 화면에 다시 띄운다. name은 파일 이름 일부나 종류(PDF, 사진, 워드)여도 된다. 비우면 가장 최근 파일.",
             "input_schema": { "type": "object", "properties": { "name": { "type": "string" } } }
+        },
+        {
+            "name": "add_todo",
+            "description": "할 일 목록에 추가한다. due는 마감일(YYYY-MM-DD)이 있을 때만.",
+            "input_schema": {
+                "type": "object",
+                "properties": { "text": { "type": "string" }, "due": { "type": "string" } },
+                "required": ["text"]
+            }
+        },
+        {
+            "name": "list_todos",
+            "description": "할 일 목록을 돌려준다 (남은 것 먼저, 번호 포함).",
+            "input_schema": { "type": "object", "properties": {} }
+        },
+        {
+            "name": "complete_todo",
+            "description": "할 일을 끝냄으로 표시한다. query는 할 일 내용 일부나 '2번' 같은 번호.",
+            "input_schema": { "type": "object", "properties": { "query": { "type": "string" } }, "required": ["query"] }
+        },
+        {
+            "name": "remove_todo",
+            "description": "할 일을 목록에서 지운다. query는 내용 일부나 번호.",
+            "input_schema": { "type": "object", "properties": { "query": { "type": "string" } }, "required": ["query"] }
+        },
+        {
+            "name": "show_todos",
+            "description": "할 일 카드를 화면에 열거나 닫는다.",
+            "input_schema": { "type": "object", "properties": { "open": { "type": "boolean" } }, "required": ["open"] }
+        },
+        {
+            "name": "get_weather",
+            "description": "현재 날씨와 4일 예보를 가져와 화면에 날씨 카드를 띄운다. place는 지역 이름(예: 대구, 서울 강남구). 사용자가 지역을 말하지 않았으면 비운다.",
+            "input_schema": { "type": "object", "properties": { "place": { "type": "string" } } }
         },
         {
             "name": "show_memory",
@@ -316,6 +385,90 @@ pub async fn run(app: &AppHandle, tb: &Toolbox, name: &str, input: &Value) -> Re
                 "기록 화면을 닫았음"
             }
             .into())
+        }
+
+        "add_todo" => {
+            let t = tb.todos.add(
+                input["text"].as_str().unwrap_or_default(),
+                input["due"].as_str().unwrap_or_default(),
+            )?;
+            let _ = app.emit("todos-changed", ());
+            let _ = app.emit("todo-panel", json!({ "open": true, "auto": true }));
+            Ok(if t.due.is_empty() {
+                format!("추가함: {}", t.text)
+            } else {
+                format!("추가함: {} (마감 {})", t.text, t.due)
+            })
+        }
+
+        "list_todos" => {
+            let list = tb.todos.sorted();
+            if list.is_empty() {
+                return Ok("할 일 없음".into());
+            }
+            let rows: Vec<Value> = list
+                .iter()
+                .enumerate()
+                .map(|(i, t)| {
+                    let due = if t.due.is_empty() {
+                        Value::Null
+                    } else {
+                        json!(t.due)
+                    };
+                    json!({ "n": i + 1, "text": t.text, "due": due, "done": t.done })
+                })
+                .collect();
+            Ok(serde_json::to_string(&rows)?)
+        }
+
+        "complete_todo" | "remove_todo" => {
+            let q = input["query"].as_str().unwrap_or_default();
+            let t = tb.todos.find(q).context("그런 할 일이 없습니다")?;
+            if name == "complete_todo" {
+                tb.todos.toggle(&t.id, Some(true))?;
+            } else {
+                tb.todos.remove(&t.id)?;
+            }
+            let _ = app.emit("todos-changed", ());
+            Ok(format!(
+                "{}: {}",
+                if name == "complete_todo" {
+                    "완료"
+                } else {
+                    "지움"
+                },
+                t.text
+            ))
+        }
+
+        "show_todos" => {
+            let open = input["open"].as_bool().unwrap_or(true);
+            let _ = app.emit("todo-panel", json!({ "open": open }));
+            Ok(if open {
+                "할 일 카드를 열었음"
+            } else {
+                "할 일 카드를 닫았음"
+            }
+            .into())
+        }
+
+        "get_weather" => {
+            let asked = input["place"]
+                .as_str()
+                .unwrap_or_default()
+                .trim()
+                .to_string();
+            let place = if asked.is_empty() {
+                tb.city.lock().map(|c| c.clone()).unwrap_or_default()
+            } else {
+                asked
+            };
+            if place.is_empty() {
+                bail!("지역을 모릅니다. 지역 이름을 말해 달라고 하거나, 화면 SETTINGS의 날씨 기본 지역을 채워 달라고 안내");
+            }
+            let w = crate::weather::get(&tb.http, &place).await?;
+            let _ = app.emit("weather", w.clone());
+            Ok(w.to_string())
         }
 
         other => bail!("알 수 없는 도구: {other}"),
