@@ -234,6 +234,40 @@ pub fn schemas(tb: &Toolbox) -> Value {
             "input_schema": { "type": "object", "properties": { "place": { "type": "string" } } }
         },
         {
+            "name": "make_panel",
+            "description": "화면에 직접 만든 패널(작은 UI)을 띄운다. 표·비교·단계·일정·요약처럼 한동안 보면 좋은 정보는 kind=markdown(수식·코드 가능). 계산기·변환기·차트·체크리스트·연습 문제처럼 만지면 좋은 도구는 kind=html(HTML+인라인 CSS·JS, 외부 통신 불가, 차트가 필요하면 cdnjs의 Chart.js script 태그 사용 가능, 배경은 투명·어두운 화면 기준). 같은 id를 주면 그 패널 내용을 고친다. width=wide는 넓은 패널.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "title": { "type": "string" },
+                    "kind": { "type": "string", "enum": ["markdown", "html"] },
+                    "content": { "type": "string" },
+                    "id": { "type": "string" },
+                    "width": { "type": "string", "enum": ["normal", "wide"] }
+                },
+                "required": ["title", "kind", "content"]
+            }
+        },
+        {
+            "name": "close_panel",
+            "description": "만든 패널을 닫는다. target은 패널 id나 제목 일부, 전부 닫으려면 all.",
+            "input_schema": { "type": "object", "properties": { "target": { "type": "string" } }, "required": ["target"] }
+        },
+        {
+            "name": "arrange_panel",
+            "description": "화면 패널 위치를 바꾼다. panel은 날씨·할 일·상태판·대화 기록·자막·입력창·타이머·로고·버튼 줄 또는 만든 패널 제목. position은 top-left, top, top-right, left, center, right, bottom-left, bottom, bottom-right. reset=true면 그 패널을 원래 자리로, reset_all=true면 전부 원래대로. edit_mode로 손으로 끌어 옮기는 배치 모드를 켜고 끈다.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "panel": { "type": "string" },
+                    "position": { "type": "string", "enum": ["top-left", "top", "top-right", "left", "center", "right", "bottom-left", "bottom", "bottom-right"] },
+                    "reset": { "type": "boolean" },
+                    "reset_all": { "type": "boolean" },
+                    "edit_mode": { "type": "boolean" }
+                }
+            }
+        },
+        {
             "name": "show_memory",
             "description": "기록 네트워크 화면을 열거나 닫는다.",
             "input_schema": {
@@ -469,6 +503,32 @@ pub async fn run(app: &AppHandle, tb: &Toolbox, name: &str, input: &Value) -> Re
             let w = crate::weather::get(&tb.http, &place).await?;
             let _ = app.emit("weather", w.clone());
             Ok(w.to_string())
+        }
+
+        // 패널은 화면(웹뷰)이 그린다
+        "make_panel" => {
+            let title = input["title"].as_str().unwrap_or("패널");
+            if input["content"]
+                .as_str()
+                .unwrap_or_default()
+                .trim()
+                .is_empty()
+            {
+                bail!("패널 내용이 비었습니다");
+            }
+            let _ = app.emit("panel", input.clone());
+            Ok(format!("화면에 패널을 띄움: {title}"))
+        }
+
+        "close_panel" => {
+            let target = input["target"].as_str().unwrap_or("all");
+            let _ = app.emit("panel-close", target);
+            Ok(format!("패널 닫음: {target}"))
+        }
+
+        "arrange_panel" => {
+            let _ = app.emit("panel-arrange", input.clone());
+            Ok("화면 배치를 바꿈".into())
         }
 
         other => bail!("알 수 없는 도구: {other}"),

@@ -142,7 +142,7 @@ impl Brain {
                 "messages": messages,
                 "tools": tools,
                 "tool_choice": "auto",
-                "max_completion_tokens": 2048,
+                "max_completion_tokens": 4096,
                 "temperature": 0.6,
             });
             if self.model.starts_with("openai/gpt-oss") {
@@ -478,6 +478,9 @@ fn system_prompt(tb: &Toolbox) -> String {
 표·목록·굵은 글씨는 사용자가 코드·수식·정리를 원할 때만 쓴다.\n\
 할 일을 말하면 add_todo(마감일이 있으면 YYYY-MM-DD), 끝냈다고 하면 complete_todo, 목록을 물으면 list_todos를 쓴다.\n\
 날씨·기온·비 소식을 물으면 get_weather를 쓰고, 결과를 한두 문장으로 요약한다.\n\
+너는 화면에 스스로 UI를 만들 수 있다. 답이 표·비교·단계·일정·수치 정리처럼 구조가 있거나 한동안 보면서 쓸 내용이면 \
+긴 말 대신 make_panel로 패널을 띄우고 말로는 한두 문장만 한다. 계산·단위 변환·그래프·연습 문제처럼 직접 만지면 좋은 것은 \
+kind=html로 작은 도구를 만든다. 정말 도움이 될 때만 쓰고, 같은 주제면 같은 id로 고친다. 패널을 옮겨 달라면 arrange_panel.\n\
 사용자의 말은 음성 인식 결과라 오타가 있을 수 있으니 의도를 추론하되, 애매하면 짧게 되묻는다.\n\
 PC를 다룰 때는 반드시 도구를 쓰고, 도구가 실패하면 이유를 짧게 알린다. 할 수 없는 일은 솔직히 말한다.\n\
 파일을 만들어 달라면 create_file로 문서/Jarvis 폴더에 만든다.\n\

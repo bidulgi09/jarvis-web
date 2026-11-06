@@ -272,6 +272,33 @@ body.dragging .drop{opacity:1}
 button:focus-visible,input:focus-visible{outline:2px solid var(--holo);outline-offset:3px}
 
 @keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+/* 자유 배치 */
+.floated{position:fixed!important;right:auto!important;bottom:auto!important;margin:0!important;max-width:calc(100vw - 12px)}
+.grabHead > header{cursor:grab;touch-action:none}
+.grabAll{cursor:grab;touch-action:none}
+.dragging,.dragging > header{cursor:grabbing!important;user-select:none;-webkit-user-select:none}
+.dragging{box-shadow:0 18px 50px rgba(0,0,0,.45),0 0 0 1px rgba(127,243,255,.35);transition:none!important}
+.layoutEdit .dragbox{pointer-events:auto!important;cursor:grab;touch-action:none;outline:1px dashed rgba(127,243,255,.5);outline-offset:5px;border-radius:12px;user-select:none;-webkit-user-select:none}
+.layoutEdit .dragbox *{pointer-events:none!important}
+.layoutEdit .dragbox:empty{min-width:60px;min-height:24px}
+.layoutEdit .dragbox:hover{outline-color:var(--holo);background-color:rgba(127,243,255,.04)}
+.layoutBar{position:fixed;z-index:12;left:50%;transform:translateX(-50%);top:calc(10px + env(safe-area-inset-top,0px));display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:center;
+  max-width:calc(100vw - 24px);padding:8px 10px 8px 16px;border-radius:999px;background:rgba(8,8,26,.85);border:1px solid rgba(127,243,255,.35);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  font-size:12px;color:var(--ink);animation:rise .4s var(--ease) both}
+.layoutBar[hidden]{display:none}
+@media (max-width:720px){.layoutBar .lbLong{display:none}}
+.layoutBar button{background:rgba(127,243,255,.08);border:1px solid var(--faint);border-radius:999px;color:var(--ink);font-family:var(--f-mono);font-size:11px;padding:5px 12px;cursor:pointer}
+.layoutBar #layoutDone{border-color:rgba(127,243,255,.5);color:var(--holo)}
+/* 자비스가 만든 패널 */
+.gen{position:fixed;display:flex;flex-direction:column;max-height:calc(var(--vvh,100vh) - 24px);pointer-events:auto;z-index:7}
+.gen header .sub{color:var(--holo);opacity:.7}
+.gen .pbody{overflow:auto;min-height:0;padding:0 14px 12px;scrollbar-width:thin}
+.gen .pbody.reply.md{font-size:13px;line-height:1.6}
+.gen .pbody.frame{padding:0}
+.gen iframe{display:block;width:100%;height:160px;border:0;background:transparent;border-radius:0 0 16px 16px}
+.gen.min .pbody{display:none}
+.gen.flash{animation:genIn .6s var(--ease) both}
+@keyframes genIn{0%{opacity:0;transform:scale(.94);box-shadow:0 0 0 1px rgba(127,243,255,.8),0 0 40px rgba(127,243,255,.35)}100%{opacity:1;transform:none}}
 @keyframes wordIn{from{opacity:0;filter:blur(6px);transform:translateY(4px)}to{opacity:1;filter:blur(0);transform:none}}
 
 @media (hover:none){ .kbdhint{display:none} }
@@ -373,6 +400,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--holo);outline-o
       <button type="button" id="memBtn">MEMORY</button>
       <button type="button" id="todoBtn">TO DO</button>
       <button type="button" id="ambBtn">AMBIENT</button>
+      <button type="button" id="layoutBtn" title="패널을 끌어 옮기는 배치 모드">LAYOUT</button>
       <button type="button" id="handBtn">HAND OFF</button>
       <button type="button" id="logBtn">LOG</button>
       <button type="button" id="voiceBtn">VOICE ON</button>
@@ -421,6 +449,11 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--holo);outline-o
   <div class="fvBody" id="fvBody"></div>
 </div>
 <div class="drop" aria-hidden="true"><div>여기에 놓으면 자비스에게 첨부합니다<small>문서 · PDF · Word · 코드 · 이미지 · 음성 파일</small></div></div>
+<div class="layoutBar" id="layoutBar" hidden role="status">
+  <span>배치 모드<span class="lbLong"> · 패널을 끌어 원하는 곳에 놓으세요 · 두 번 누르면 원래 자리</span></span>
+  <button type="button" id="layoutReset">모두 원래대로</button>
+  <button type="button" id="layoutDone">완료</button>
+</div>
 <div class="demo" id="demo" hidden>DEMO · SETTINGS에 무료 Groq 키를 넣으면 실제로 대화합니다</div>
 
 <div class="settings" id="settings" hidden role="dialog" aria-modal="true" aria-labelledby="cfgTitle">
@@ -615,6 +648,8 @@ function webSystemPrompt(){
 다만 수식·코드·표·여러 단계 설명이 필요하면 화면에 서식이 그대로 보이므로: 수식은 LaTeX($...$, 따로 줄은 $$...$$), 코드는 \`\`\`언어 코드 블록, 목록·표·굵은 글씨는 마크다운으로 쓴다. 이때는 길어져도 된다.
 할 일을 말하면 add_todo로 추가하고(마감이 있으면 due에 YYYY-MM-DD), 끝냈다고 하면 complete_todo, 할 일을 물으면 list_todos를 쓴다.
 날씨를 물으면 get_weather를 쓴다. 지역을 말하지 않았으면 place를 비운다.
+너는 화면에 스스로 UI를 만들 수 있다. 답이 표·비교·단계·일정·수치 정리처럼 구조가 있거나 사용자가 한동안 보면서 쓸 내용이면, 긴 말 대신 make_panel로 패널을 띄우고 말로는 한두 문장만 한다. 계산·단위 변환·그래프·연습 문제처럼 직접 만지면 좋은 것은 kind=html로 작은 도구를 만든다. 매번은 아니고 정말 도움이 될 때만 쓴다(가벼운 잡담·짧은 답에는 쓰지 않는다). 이미 있는 패널과 같은 주제면 같은 id로 고친다. 패널을 옮겨 달라면 arrange_panel을 쓴다.
+지금 떠 있는 패널: ${genPanels.length ? genPanels.map(p => p.title + "(id " + p.id.slice(2) + ")").join(", ") : "없음"}
 사용자의 말은 음성 인식 결과라 오타가 있을 수 있으니 의도를 추론한다.
 타이머, 홀로그램 분위기, 링크 열기, 파일 만들기, 시각 확인은 반드시 도구를 호출해서 처리한다.
 사용자가 기억·기록·메모해 달라고 하거나 일정·마감·선호처럼 나중에 다시 쓸 정보를 말하면 remember로 기록한다. 주제 태그 2~4개를 붙이고, 이미 있는 기록과 관련 있으면 related에 그 제목을 넣어 이어 준다.
@@ -755,6 +790,15 @@ const WEB_TOOLS = [
   { name: "get_weather", description: "현재 날씨와 4일 예보를 가져와 화면에 날씨 카드를 띄운다. place는 지역 이름(예: 대구, 서울 강남구). 사용자가 지역을 말하지 않았으면 비운다.",
     input_schema: { type: "object", properties: { place: { type: "string" } } },
     run: async (i) => JSON.stringify(await getWeather(i.place)) },
+  { name: "make_panel", description: "화면에 직접 만든 패널(작은 UI)을 띄운다. 표·비교·단계·일정·요약처럼 한동안 보면 좋은 정보는 kind=markdown(수식·코드 가능). 계산기·변환기·차트·체크리스트·연습 문제처럼 만지면 좋은 도구는 kind=html(HTML+인라인 CSS·JS, 외부 통신 불가, 차트가 필요하면 cdnjs의 Chart.js script 태그 사용 가능, 배경은 투명·어두운 화면 기준). 같은 id를 주면 그 패널 내용을 고친다. width=wide는 넓은 패널.",
+    input_schema: { type: "object", properties: { title: { type: "string" }, kind: { type: "string", enum: ["markdown", "html"] }, content: { type: "string" }, id: { type: "string" }, width: { type: "string", enum: ["normal", "wide"] } }, required: ["title", "kind", "content"] },
+    run: (i) => makePanel(i) },
+  { name: "close_panel", description: "만든 패널을 닫는다. target은 패널 id나 제목 일부, 전부 닫으려면 all.",
+    input_schema: { type: "object", properties: { target: { type: "string" } }, required: ["target"] },
+    run: (i) => closePanel(i.target) },
+  { name: "arrange_panel", description: "화면 패널 위치를 바꾼다. panel은 날씨·할 일·상태판·대화 기록·자막·입력창·타이머·로고·버튼 줄 또는 만든 패널 제목. position은 top-left, top, top-right, left, center, right, bottom-left, bottom, bottom-right. reset=true면 그 패널을 원래 자리로, reset_all=true면 전부 원래대로. edit_mode로 손으로 끌어 옮기는 배치 모드를 켜고 끈다.",
+    input_schema: { type: "object", properties: { panel: { type: "string" }, position: { type: "string", enum: ["top-left", "top", "top-right", "left", "center", "right", "bottom-left", "bottom", "bottom-right"] }, reset: { type: "boolean" }, reset_all: { type: "boolean" }, edit_mode: { type: "boolean" } } },
+    run: (i) => arrangePanel(i) },
   { name: "show_memory", description: "기록 네트워크 화면을 열거나 닫는다.",
     input_schema: { type: "object", properties: { open: { type: "boolean" } }, required: ["open"] },
     run: (i) => { fire("memory-panel", !!i.open); return i.open ? "기록 화면을 열었음" : "기록 화면을 닫았음"; } },
@@ -940,7 +984,7 @@ function webApi(){
         const v = await groqChat({
           messages: [{ role: "system", content: webSystemPrompt() }, ...ohist],
           tools: groqTools(), tool_choice: "auto",
-          max_completion_tokens: 2048, temperature: 0.6,
+          max_completion_tokens: 4096, temperature: 0.6,
         }, models);
         if (round === 0 && lastGroqModel !== b.model) fire("tool", { name: "fallback:" + lastGroqModel });
         models = [lastGroqModel];
@@ -2425,6 +2469,265 @@ addEventListener("pointerdown", ambKick, true); addEventListener("keydown", ambK
 on("hologram", (mm) => ambient.setMood(mm));
 
 // ======================================================================
+//  자유 배치: 패널을 잡아 끌어 아무 데나 놓는다.
+//   카드는 머리줄을, 상태판·로고·타이머는 아무 곳이나 잡으면 된다.
+//   LAYOUT(배치 모드)에서는 로그·자막·입력창까지 전부 옮길 수 있다.
+//   위치는 화면 비율로 저장한다 (넓은 화면과 휴대폰은 따로). 두 번 누르면 원래 자리.
+// ======================================================================
+const LAYOUT_KEY = "jarvis.layout";
+const layout = (() => { try { const v = JSON.parse(localStorage.getItem(LAYOUT_KEY) || "{}"); return v && typeof v === "object" ? v : {}; } catch { return {}; } })();
+const saveLayout = () => { try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout)); } catch {} };
+const layoutMode = () => (narrowScreen() ? "n" : "w");
+const vpH = () => window.visualViewport?.height || innerHeight;
+const draggables = new Map();   // key → { el, handle, name }
+const NO_DRAG = "button, input, textarea, select, a, label, iframe, [contenteditable], .code pre";
+let frontEl = null, lastDragEnd = 0;
+const updCapSoon = () => requestAnimationFrame(() => updCap());
+
+function toFront(el){
+  if (frontEl && frontEl !== el) frontEl.style.zIndex = frontEl.classList.contains("floated") ? "7" : "";
+  frontEl = el; el.style.zIndex = "9";
+}
+function placeFloat(el, x, y){
+  const m = 6, w = el.offsetWidth, W0 = innerWidth, H0 = vpH();
+  const L = Math.min(Math.max(m, x), Math.max(m, W0 - w - m));
+  const T = Math.min(Math.max(m, y), Math.max(m, H0 - Math.min(el.offsetHeight || 40, 56) - m));
+  el.style.left = L + "px"; el.style.top = T + "px";
+}
+function floatEl(el, w){
+  el.classList.add("floated");
+  el.style.width = Math.min(w, innerWidth - 12) + "px";
+  if (!el.style.zIndex) el.style.zIndex = "7";
+}
+function unfloat(el){
+  el.classList.remove("floated");
+  for (const k of ["left", "top", "width", "zIndex"]) el.style[k] = "";
+}
+function rememberPos(key, el){
+  const r = el.getBoundingClientRect(), room = innerWidth - r.width;
+  (layout[layoutMode()] ||= {})[key] = { fx: room > 0 ? +(r.left / room).toFixed(4) : 0, fy: +(r.top / vpH()).toFixed(4), w: Math.round(r.width) };
+  saveLayout();
+}
+function applyPos(key){
+  const d = draggables.get(key); if (!d || d.el.classList.contains("dragging")) return;
+  const p = layout[layoutMode()]?.[key];
+  if (!p){ d.el.classList.contains("gen") ? genDefaultPos(d.el) : unfloat(d.el); return; }
+  floatEl(d.el, p.w);
+  placeFloat(d.el, p.fx * Math.max(0, innerWidth - d.el.offsetWidth), p.fy * vpH());
+}
+const applyAllPos = () => { for (const k of draggables.keys()) applyPos(k); };
+function resetPos(key){
+  const m = layout[layoutMode()]; if (m) delete m[key];
+  saveLayout(); applyPos(key);
+}
+
+const ro = new ResizeObserver((ents) => { for (const e of ents){ const k = e.target.dataset.dragKey; if (k && e.target.classList.contains("floated")) applyPos(k); } });
+
+function makeDraggable(el, key, name, handle = null){
+  if (!el) return;
+  draggables.set(key, { el, handle, name });
+  el.dataset.dragKey = key; el.classList.add("dragbox");
+  if (handle) el.classList.add(handle === true ? "grabAll" : "grabHead");
+  el.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0) return;
+    const editing = document.body.classList.contains("layoutEdit");
+    if (!editing){
+      if (!handle || e.target.closest(NO_DRAG)) return;
+      if (handle !== true && !e.target.closest(handle)) return;
+    }
+    const r = el.getBoundingClientRect();
+    const st = { x: e.clientX, y: e.clientY, dx: e.clientX - r.left, dy: e.clientY - r.top, id: e.pointerId, moved: false };
+    const move = (ev) => {
+      if (ev.pointerId !== st.id) return;
+      if (!st.moved){
+        if (Math.hypot(ev.clientX - st.x, ev.clientY - st.y) < 5) return;
+        st.moved = true; floatEl(el, r.width); el.classList.add("dragging"); toFront(el);
+      }
+      ev.preventDefault();
+      placeFloat(el, ev.clientX - st.dx, ev.clientY - st.dy);
+    };
+    const up = (ev) => {
+      if (ev.pointerId !== st.id) return;
+      removeEventListener("pointermove", move); removeEventListener("pointerup", up); removeEventListener("pointercancel", up);
+      if (!st.moved) return;
+      el.classList.remove("dragging"); lastDragEnd = performance.now();
+      rememberPos(key, el);
+      if (key === "caption") updCapSoon();
+    };
+    addEventListener("pointermove", move, { passive: false }); addEventListener("pointerup", up); addEventListener("pointercancel", up);
+  });
+  el.addEventListener("dblclick", (e) => {
+    const editing = document.body.classList.contains("layoutEdit");
+    if (!editing && (!handle || e.target.closest(NO_DRAG) || (handle !== true && !e.target.closest(handle)))) return;
+    if (el.classList.contains("gen") && !editing) return;   // 만든 패널은 머리줄 두 번 = 접기
+    resetPos(key); if (key === "caption") updCapSoon();
+  });
+  ro.observe(el);
+  applyPos(key);
+}
+// 끌기를 마친 직후의 클릭은 버린다 (놓는 순간 버튼이 눌리지 않게)
+document.addEventListener("click", (e) => { if (performance.now() - lastDragEnd < 250 && e.target.closest?.(".dragbox")){ e.stopPropagation(); e.preventDefault(); } }, true);
+
+let lastMode = layoutMode();
+const onViewport = () => { const m = layoutMode(); if (m !== lastMode){ lastMode = m; } applyAllPos(); };
+addEventListener("resize", onViewport);
+window.visualViewport?.addEventListener("resize", onViewport);
+
+makeDraggable(document.querySelector(".brand"), "brand", "로고", true);
+makeDraggable($("status"), "status", "상태판", true);
+makeDraggable($("timers"), "timers", "타이머", true);
+makeDraggable($("wx"), "wx", "날씨", "header");
+makeDraggable($("todo"), "todo", "할 일", "header");
+makeDraggable($("cam"), "cam", "카메라", true);
+makeDraggable($("log"), "log", "대화 기록");
+makeDraggable(document.querySelector(".caption"), "caption", "자막");
+makeDraggable($("form"), "bar", "입력창");
+makeDraggable(document.querySelector(".hint"), "hint", "버튼 줄");
+
+// 배치 모드
+function setLayoutEdit(on){
+  document.body.classList.toggle("layoutEdit", !!on);
+  $("layoutBar").hidden = !on;
+  $("layoutBtn").textContent = on ? "LAYOUT ✓" : "LAYOUT";
+}
+$("layoutBtn").onclick = () => setLayoutEdit(!document.body.classList.contains("layoutEdit"));
+$("layoutDone").onclick = () => setLayoutEdit(false);
+$("layoutReset").onclick = () => { delete layout[layoutMode()]; saveLayout(); applyAllPos(); updCapSoon(); };
+addEventListener("keydown", (e) => { if (e.key === "Escape" && document.body.classList.contains("layoutEdit")) setLayoutEdit(false); });
+
+const PLACES = {
+  "top-left": [0, 0.02], top: [0.5, 0.02], "top-right": [1, 0.02],
+  left: [0, 0.34], center: [0.5, 0.34], right: [1, 0.34],
+  "bottom-left": [0, 0.66], bottom: [0.5, 0.66], "bottom-right": [1, 0.66],
+};
+function findDraggable(q){
+  q = String(q || "").trim().toLowerCase(); if (!q) return null;
+  const alias = { weather: "wx", 날씨: "wx", todo: "todo", "할 일": "todo", 할일: "todo", status: "status", 상태: "status", log: "log", 기록: "log", 로그: "log",
+    caption: "caption", 자막: "caption", 답변: "caption", input: "bar", 입력: "bar", 입력창: "bar", timer: "timers", 타이머: "timers", logo: "brand", 로고: "brand", camera: "cam", 카메라: "cam", buttons: "hint", 버튼: "hint" };
+  for (const [a, k] of Object.entries(alias)) if (q.includes(a)) return k;
+  for (const [k, d] of draggables) if (d.name.toLowerCase().includes(q) || q.includes(d.name.toLowerCase()) || k === q) return k;
+  return null;
+}
+function arrangePanel({ panel, position, reset, reset_all, edit_mode } = {}){
+  if (edit_mode != null){ setLayoutEdit(!!edit_mode); if (!panel && !reset_all) return edit_mode ? "배치 모드를 켰음 (화면의 패널을 끌어 옮길 수 있음)" : "배치 모드를 껐음"; }
+  if (reset_all){ delete layout[layoutMode()]; saveLayout(); applyAllPos(); updCapSoon(); return "모든 패널을 원래 자리로 되돌렸음"; }
+  const key = findDraggable(panel);
+  if (!key) throw new Error(`'${panel}' 패널을 찾지 못했습니다. 있는 패널: ${[...draggables.values()].map(d => d.name).join(", ")}`);
+  const { el, name } = draggables.get(key);
+  if (reset){ resetPos(key); updCapSoon(); return `${name}을(를) 원래 자리로 되돌렸음`; }
+  const p = PLACES[position]; if (!p) throw new Error("position은 " + Object.keys(PLACES).join(", ") + " 중 하나");
+  if (key === "todo" && el.hidden) setTodoOpen(true);
+  floatEl(el, el.getBoundingClientRect().width || 300);
+  (layout[layoutMode()] ||= {})[key] = { fx: p[0], fy: p[1] + (p[1] > 0.5 ? 0.1 : p[1] > 0.2 ? 0 : 0.06), w: Math.round(el.getBoundingClientRect().width) };
+  saveLayout(); applyPos(key); toFront(el); updCapSoon();
+  return `${name}을(를) ${position}(으)로 옮겼음`;
+}
+
+// ======================================================================
+//  자비스가 직접 만드는 패널: make_panel로 화면에 작은 UI를 띄운다.
+//   markdown: 서식 있는 정보 카드 (DOMPurify로 거름)
+//   html: 계산기·차트 같은 작은 도구. 스크립트는 허용하되 sandbox iframe 안에서만,
+//         외부 통신은 CSP로 막는다 (차트용 CDN 스크립트만 허용).
+//   이 브라우저에 최근 8개까지 남는다.
+// ======================================================================
+const PANELS_KEY = "jarvis.panels", PANEL_MAX = 8;
+let genPanels = (() => { try { const a = JSON.parse(localStorage.getItem(PANELS_KEY) || "[]"); return Array.isArray(a) ? a.filter(p => p && p.id) : []; } catch { return []; } })();
+const savePanels = () => { try { localStorage.setItem(PANELS_KEY, JSON.stringify(genPanels)); } catch {} };
+const slug = (s) => String(s).toLowerCase().replace(/[^0-9a-z가-힣]+/g, "-").replace(/^-|-$/g, "").slice(0, 32) || "panel";
+
+function frameDoc(html){
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'unsafe-inline'; img-src data: blob:; font-src data:">
+<style>:root{color-scheme:dark;--holo:#7ff3ff;--ink:#e8f6ff;--dim:rgba(200,225,255,.62);--warm:#ffcf8a;--line:rgba(127,243,255,.18)}
+html,body{margin:0;background:transparent;color:var(--ink);font:13px/1.55 "IBM Plex Sans KR",system-ui,sans-serif}
+body{padding:2px 14px 14px;overflow-wrap:anywhere}a{color:var(--holo)}h1,h2,h3{font-size:14px;margin:.4em 0}
+button,input,select,textarea{font:inherit;color:inherit;background:rgba(127,243,255,.07);border:1px solid var(--line);border-radius:9px;padding:5px 9px}
+button{cursor:pointer}button:hover{border-color:var(--holo)}input[type=range]{accent-color:var(--holo);padding:0}
+table{border-collapse:collapse;width:100%}th,td{border-bottom:1px solid var(--line);padding:4px 6px;text-align:left}canvas,svg,img{max-width:100%}</style>
+</head><body>${html}<script>(()=>{const s=()=>parent.postMessage({jarvisPanel:1,h:Math.ceil(document.body.getBoundingClientRect().height)},"*");try{new ResizeObserver(s).observe(document.body)}catch(e){}addEventListener("load",s);s();})()<\/script></body></html>`;
+}
+addEventListener("message", (e) => {
+  if (!e.data || e.data.jarvisPanel !== 1) return;
+  for (const f of document.querySelectorAll(".gen iframe")) if (f.contentWindow === e.source) f.style.height = Math.min(Math.max(40, +e.data.h || 0) + 2, Math.round(vpH() * 0.62)) + "px";
+});
+
+function genDefaultPos(el){
+  const i = Math.max(0, genPanels.findIndex(p => p.id === el.id));
+  el.classList.add("floated");
+  if (narrowScreen()){ el.style.width = (innerWidth - 12) + "px"; placeFloat(el, 6, 64 + i * 22); }
+  else { el.style.width = el.dataset.w + "px"; placeFloat(el, innerWidth * 0.5 - el.dataset.w - 190 + i * 26, 96 + i * 30); }
+  if (!el.style.zIndex) el.style.zIndex = "7";
+}
+
+function renderPanel(p){
+  let el = document.getElementById(p.id), fresh = false;
+  if (!el){
+    fresh = true;
+    el = document.createElement("section");
+    el.className = "card gen"; el.id = p.id; el.setAttribute("aria-label", p.title);
+    el.innerHTML = `<header><b class="pt"></b><span class="sub"></span><button type="button" class="pmin" aria-label="접기">–</button><button type="button" class="px" aria-label="닫기">✕</button></header><div class="pbody"></div>`;
+    el.querySelector(".px").onclick = () => closePanel(p.id);
+    el.querySelector(".pmin").onclick = () => el.classList.toggle("min");
+    el.querySelector("header").addEventListener("dblclick", (e) => { if (!e.target.closest("button") && !document.body.classList.contains("layoutEdit")) el.classList.toggle("min"); });
+    el.addEventListener("pointerdown", () => toFront(el));
+    document.body.append(el);
+  }
+  el.dataset.w = p.width === "wide" ? 440 : 320;
+  el.querySelector(".pt").textContent = p.title;
+  el.querySelector(".sub").textContent = p.kind === "html" ? "JARVIS · 도구" : "JARVIS";
+  const body = el.querySelector(".pbody");
+  body.textContent = "";
+  if (p.kind === "html"){
+    body.className = "pbody frame";
+    const f = document.createElement("iframe");
+    f.setAttribute("sandbox", "allow-scripts allow-forms");
+    f.setAttribute("referrerpolicy", "no-referrer");
+    f.title = p.title; f.srcdoc = frameDoc(p.content);
+    body.append(f);
+  } else {
+    body.className = "pbody reply md";
+    const html = MD.render(p.content);
+    if (html != null) body.innerHTML = html; else body.textContent = p.content;
+  }
+  if (fresh) makeDraggable(el, p.id, p.title, "header");
+  else { draggables.get(p.id).name = p.title; applyPos(p.id); }
+  el.classList.remove("min", "flash"); void el.offsetWidth; el.classList.add("flash");
+  toFront(el);
+}
+
+function makePanel({ title, content, kind, id, width } = {}){
+  title = String(title || "패널").trim().slice(0, 40) || "패널";
+  content = String(content ?? "").slice(0, 60000);
+  if (!content.trim()) throw new Error("패널 내용이 비었습니다");
+  kind = kind === "html" ? "html" : "markdown";
+  const pid = id ? "p-" + slug(id) : (genPanels.find(p => p.title === title)?.id || "p-" + slug(title) + "-" + Date.now().toString(36).slice(-4));
+  const old = genPanels.find(p => p.id === pid);
+  const p = { id: pid, title, kind, content, width: width === "wide" ? "wide" : "normal", updated: Date.now() };
+  genPanels = [...genPanels.filter(x => x.id !== pid), p];
+  while (genPanels.length > PANEL_MAX){ const gone = genPanels.shift(); removePanelEl(gone.id); }
+  savePanels(); renderPanel(p);
+  return `${old ? "패널을 고침" : "패널을 만듦"}: ${title} (id ${pid.slice(2)})`;
+}
+function removePanelEl(id){
+  const el = document.getElementById(id); if (!el) return;
+  ro.unobserve(el); draggables.delete(id); el.remove();
+  const m = layout[layoutMode()]; if (m && m[id]){ delete m[id]; saveLayout(); }
+}
+function closePanel(target){
+  const q = String(target ?? "").trim().toLowerCase();
+  const hit = q === "all" || q === "모두" || q === "전부" ? genPanels.slice()
+    : genPanels.filter(p => p.id === target || p.id === "p-" + slug(q) || p.title.toLowerCase().includes(q));
+  if (!q || !hit.length) throw new Error("그런 패널이 없습니다" + (genPanels.length ? ". 있는 패널: " + genPanels.map(p => p.title).join(", ") : ""));
+  for (const p of hit) removePanelEl(p.id);
+  genPanels = genPanels.filter(p => !hit.includes(p)); savePanels();
+  return "닫음: " + hit.map(p => p.title).join(", ");
+}
+on("panel", (p) => { try { makePanel(p); } catch {} });
+on("panel-close", (t) => { try { closePanel(t); } catch {} });
+on("panel-arrange", (a) => { try { arrangePanel(a); } catch {} });
+genPanels.forEach(renderPanel);
+
+// ======================================================================
 //  대화
 // ======================================================================
 let busy = false;
@@ -2667,7 +2970,7 @@ try { if (localStorage.getItem("jarvis.hand") === "on") startHand(); } catch {}
 on("mic-level", (v) => { micLevel = Math.max(0, Math.min(1, +v || 0)); });
 on("hologram", (m) => { if (PALETTES[m]) mood = m; });
 on("tool", (p) => logLine("tool", "", "▸ " + (String(p?.name).startsWith("fallback:") ? "바쁜 모델 대신 " + p.name.slice(9) + " 사용" : (TOOL_NAMES[p?.name] || p?.name))));
-const TOOL_NAMES = { get_datetime:"시각 확인", open_app:"프로그램 실행", open_url:"브라우저 열기", set_volume:"볼륨 조절", set_timer:"타이머 설정", set_hologram:"홀로그램 전환", create_file:"파일 만들기", read_file:"첨부 파일 읽기", open_file_picker:"파일 선택 창", show_file:"파일 다시 보기", add_todo:"할 일 추가", list_todos:"할 일 확인", complete_todo:"할 일 완료", remove_todo:"할 일 삭제", show_todos:"할 일 카드", get_weather:"날씨 확인", remember:"기록하기", recall:"기록 찾기", show_memory:"기록 화면" };
+const TOOL_NAMES = { get_datetime:"시각 확인", open_app:"프로그램 실행", open_url:"브라우저 열기", set_volume:"볼륨 조절", set_timer:"타이머 설정", set_hologram:"홀로그램 전환", create_file:"파일 만들기", read_file:"첨부 파일 읽기", open_file_picker:"파일 선택 창", show_file:"파일 다시 보기", add_todo:"할 일 추가", list_todos:"할 일 확인", complete_todo:"할 일 완료", remove_todo:"할 일 삭제", show_todos:"할 일 카드", get_weather:"날씨 확인", remember:"기록하기", recall:"기록 찾기", show_memory:"기록 화면", make_panel:"패널 만들기", close_panel:"패널 닫기", arrange_panel:"화면 배치" };
 
 const timers = new Map();
 on("timer-set", ({id, label, seconds}) => {
@@ -3365,7 +3668,8 @@ function updatePassers(now){
 
 let captionTop = Infinity;
 const capEl = document.querySelector(".caption");
-const updCap = () => { const r = capEl.getBoundingClientRect(); captionTop = capEl.textContent.trim() ? r.top : Infinity; };
+// 자막을 다른 곳으로 옮겨 두었으면 구체가 비켜 줄 필요가 없다
+const updCap = () => { const r = capEl.getBoundingClientRect(); captionTop = capEl.textContent.trim() && !capEl.classList.contains("floated") ? r.top : Infinity; };
 new ResizeObserver(updCap).observe(capEl); addEventListener("resize", updCap); new MutationObserver(updCap).observe(capEl, { childList: true, subtree: true });
 let last = performance.now(), clock = 0;
 function frame(now){
