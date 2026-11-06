@@ -305,6 +305,17 @@ pub fn schemas(tb: &Toolbox) -> Value {
             "input_schema": { "type": "object", "properties": {} }
         },
         {
+            "name": "self_destruct",
+            "description": "자폭 연출: 카운트다운 뒤 홀로그램이 터지고 블랙홀이 생긴다. 화면 연출일 뿐 데이터·파일·기록은 아무것도 지우지 않는다. action=start(seconds 3~10, 기본 5), cancel(카운트다운 취소), restore(블랙홀을 닫고 홀로그램 복구).",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "action": { "type": "string", "enum": ["start", "cancel", "restore"] },
+                    "seconds": { "type": "number" }
+                }
+            }
+        },
+        {
             "name": "make_panel",
             "description": "화면에 직접 만든 패널(작은 UI)을 띄운다. 표·비교·단계·일정·요약처럼 한동안 보면 좋은 정보는 kind=markdown(수식·코드 가능). 계산기·변환기·차트·체크리스트·연습 문제처럼 만지면 좋은 도구는 kind=html(HTML+인라인 CSS·JS, 외부 통신 불가, 차트가 필요하면 cdnjs의 Chart.js script 태그 사용 가능, 배경은 투명·어두운 화면 기준). 같은 id를 주면 그 패널 내용을 고친다. width=wide는 넓은 패널.",
             "input_schema": {
@@ -597,6 +608,16 @@ pub async fn run(app: &AppHandle, tb: &Toolbox, name: &str, input: &Value) -> Re
             let target = input["target"].as_str().unwrap_or("all");
             let _ = app.emit("panel-close", target);
             Ok(format!("패널 닫음: {target}"))
+        }
+
+        "self_destruct" => {
+            let _ = app.emit("self-destruct", input.clone());
+            Ok(match input["action"].as_str().unwrap_or("start") {
+                "cancel" => "자폭을 취소했음",
+                "restore" => "블랙홀을 닫고 홀로그램을 복구하는 중",
+                _ => "자폭 카운트다운 시작 (화면 연출일 뿐 데이터는 지우지 않음)",
+            }
+            .into())
         }
 
         "arrange_panel" => {

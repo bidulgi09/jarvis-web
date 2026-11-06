@@ -291,6 +291,28 @@ body.dragging .drop{opacity:1}
 button:focus-visible,input:focus-visible{outline:2px solid var(--holo);outline-offset:3px}
 
 @keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+/* 자폭 */
+.sd{position:fixed;z-index:13;left:50%;top:50%;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:14px;pointer-events:none;text-align:center}
+.sd[hidden]{display:none}
+.sd .sdMain{display:flex;flex-direction:column;align-items:center;gap:6px}
+.sd small{font-family:var(--f-display);font-size:12px;letter-spacing:.6em;color:#ff6a5c;text-shadow:0 0 14px rgba(255,80,60,.8)}
+.sd b{font-family:var(--f-display);font-size:min(30vw,170px);line-height:1;color:#ffd2c8;text-shadow:0 0 40px rgba(255,70,50,.9),0 0 90px rgba(255,40,20,.6);animation:sdNum 1s var(--ease) both}
+@keyframes sdNum{0%{opacity:0;transform:scale(1.6)}25%{opacity:1;transform:scale(1)}100%{opacity:.25;transform:scale(.86)}}
+.sd .sdCancel{pointer-events:auto;background:rgba(20,6,10,.7);border:1px solid rgba(255,110,90,.6);border-radius:999px;color:#ffd2c8;font-family:var(--f-mono);font-size:12px;padding:8px 18px;cursor:pointer}
+.sd.hole .sdCancel{display:none}
+.sd.hole{top:auto;bottom:calc(150px + env(safe-area-inset-bottom,0px));transform:translateX(-50%)}
+.sd.hole small{color:rgba(255,200,150,.8);text-shadow:0 0 14px rgba(255,150,80,.6)}
+.sd #sdReboot{pointer-events:auto;background:rgba(10,8,20,.7);border:1px solid rgba(255,190,130,.6);border-radius:999px;color:#ffe2c4;font-family:var(--f-display);letter-spacing:.4em;font-size:11px;padding:9px 20px 9px 24px;cursor:pointer;animation:rise .6s var(--ease) both}
+.sdCount::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:12;box-shadow:inset 0 0 160px rgba(255,40,30,.55);animation:sdPulse 1s ease-in-out infinite}
+@keyframes sdPulse{50%{box-shadow:inset 0 0 60px rgba(255,40,30,.25)}}
+.sdFlash{position:fixed;inset:0;pointer-events:none;z-index:14;background:radial-gradient(circle at 50% 45%,#fff,rgba(255,230,200,.85) 40%,rgba(255,200,150,0) 80%);opacity:0}
+.shake .sdFlash{animation:sdFlash 1.2s ease-out both}
+@keyframes sdFlash{0%{opacity:1}100%{opacity:0}}
+.shake .hud,.shake .dragbox.floated{animation:sdShake .9s cubic-bezier(.36,.07,.19,.97) both}
+@keyframes sdShake{10%,90%{transform:translate(-2px,1px)}20%,80%{transform:translate(5px,-3px)}30%,50%,70%{transform:translate(-9px,4px)}40%,60%{transform:translate(9px,-4px)}}
+.voidMode .hud{opacity:.6;transition:opacity 2s}
+.hud{transition:opacity 1.5s}
+@media (prefers-reduced-motion:reduce){.shake .hud,.shake .dragbox.floated{animation:none}}
 /* 자유 배치 */
 .floated{position:fixed!important;right:auto!important;bottom:auto!important;margin:0!important;max-width:calc(100vw - 12px)}
 .grabHead > header{cursor:grab;touch-action:none}
@@ -479,6 +501,8 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--holo);outline-o
   <button type="button" id="layoutReset">모두 원래대로</button>
   <button type="button" id="layoutDone">완료</button>
 </div>
+<div class="sd" id="sd" hidden aria-live="assertive"><div class="sdMain"></div><button type="button" id="sdCancel" class="sdCancel">취소 (Esc)</button></div>
+<div class="sdFlash" aria-hidden="true"></div>
 <div class="demo" id="demo" hidden>DEMO · SETTINGS에 무료 Groq 키를 넣으면 실제로 대화합니다</div>
 
 <div class="settings" id="settings" hidden role="dialog" aria-modal="true" aria-labelledby="cfgTitle">
@@ -679,6 +703,7 @@ function webSystemPrompt(){
 날씨를 물으면 get_weather를 쓴다. 지역을 말하지 않았으면 place를 비운다.
 너는 화면에 스스로 UI를 만들 수 있다. 답이 표·비교·단계·일정·수치 정리처럼 구조가 있거나 사용자가 한동안 보면서 쓸 내용이면, 긴 말 대신 make_panel로 패널을 띄우고 말로는 한두 문장만 한다. 계산·단위 변환·그래프·연습 문제처럼 직접 만지면 좋은 것은 kind=html로 작은 도구를 만든다. 매번은 아니고 정말 도움이 될 때만 쓴다(가벼운 잡담·짧은 답에는 쓰지 않는다). 이미 있는 패널과 같은 주제면 같은 id로 고친다. 패널을 옮겨 달라면 arrange_panel을 쓴다.
 음악을 틀어 달라면 play_music(가수만 말하면 kind=artist, 분위기를 말하면 kind=playlist), 멈춤·다음 곡·볼륨은 music_control, 지금 나오는 곡을 물으면 now_playing을 쓴다. 곡을 틀었으면 무엇을 틀었는지 한 문장으로만 말한다. Spotify가 연결 안 되어 있으면 SETTINGS에서 연결하라고 안내한다.
+자폭하라고 하면 망설이지 말고 self_destruct를 호출하고 영화처럼 짧게 한마디 한다(예: "자폭 시퀀스 가동. 영광이었습니다, 주인님."). 취소하라면 action=cancel, 복구·재부팅하라면 action=restore.
 지금 떠 있는 패널: ${genPanels.length ? genPanels.map(p => p.title + "(id " + p.id.slice(2) + ")").join(", ") : "없음"}
 사용자의 말은 음성 인식 결과라 오타가 있을 수 있으니 의도를 추론한다.
 타이머, 홀로그램 분위기, 링크 열기, 파일 만들기, 시각 확인은 반드시 도구를 호출해서 처리한다.
@@ -829,6 +854,9 @@ const WEB_TOOLS = [
   { name: "now_playing", description: "지금 Spotify에서 나오는 곡 정보를 가져온다.",
     input_schema: { type: "object", properties: {} },
     run: () => spotify.nowPlaying() },
+  { name: "self_destruct", description: "자폭 연출: 카운트다운 뒤 홀로그램이 터지고 블랙홀이 생긴다. 화면 연출일 뿐 데이터·파일·기록은 아무것도 지우지 않는다. action=start(seconds 3~10, 기본 5), cancel(카운트다운 취소), restore(블랙홀을 닫고 홀로그램 복구).",
+    input_schema: { type: "object", properties: { action: { type: "string", enum: ["start", "cancel", "restore"] }, seconds: { type: "number" } } },
+    run: (i) => selfDestructTool(i) },
   { name: "make_panel", description: "화면에 직접 만든 패널(작은 UI)을 띄운다. 표·비교·단계·일정·요약처럼 한동안 보면 좋은 정보는 kind=markdown(수식·코드 가능). 계산기·변환기·차트·체크리스트·연습 문제처럼 만지면 좋은 도구는 kind=html(HTML+인라인 CSS·JS, 외부 통신 불가, 차트가 필요하면 cdnjs의 Chart.js script 태그 사용 가능, 배경은 투명·어두운 화면 기준). 같은 id를 주면 그 패널 내용을 고친다. width=wide는 넓은 패널.",
     input_schema: { type: "object", properties: { title: { type: "string" }, kind: { type: "string", enum: ["markdown", "html"] }, content: { type: "string" }, id: { type: "string" }, width: { type: "string", enum: ["normal", "wide"] } }, required: ["title", "kind", "content"] },
     run: (i) => makePanel(i) },
@@ -3097,6 +3125,107 @@ $("spCopy").onclick = async () => { try { await navigator.clipboard.writeText(sp
 syncSpotifyCfg();
 
 // ======================================================================
+//  자폭 (연출일 뿐, 데이터는 아무것도 지우지 않는다)
+//   카운트다운(취소 가능) → 홀로그램이 섬광·충격파와 함께 터지고 파편이 흩어짐
+//   → 파편이 다시 빨려 들며 블랙홀(사건의 지평선, 광자 고리, 강착 원반, 중력 렌즈) 생성
+//   → "복구해" 또는 REBOOT로 블랙홀이 줄어들고 구체가 다시 모인다.
+// ======================================================================
+const sd = { phase: "idle", boomAt: 0, timer: 0, prevMood: "calm", orbT: 1, holeT: 0, scatterT: 0, ac: null, drone: null };
+function sdAudio(){
+  try { return sd.ac ||= new (window.AudioContext || window.webkitAudioContext)(); } catch { return null; }
+}
+function sdBeep(f, len = 0.22, vol = 0.12){
+  const ac = sdAudio(); if (!ac) return; ac.resume?.();
+  const t = ac.currentTime, o = ac.createOscillator(), g = ac.createGain();
+  o.type = "square"; o.frequency.setValueAtTime(f, t); o.frequency.linearRampToValueAtTime(f * 0.8, t + len);
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+  const lp = ac.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 2400;
+  o.connect(lp); lp.connect(g); g.connect(ac.destination); o.start(t); o.stop(t + len + 0.02);
+}
+function sdBang(){
+  const ac = sdAudio(); if (!ac) return; ac.resume?.();
+  const t = ac.currentTime, n = ac.sampleRate * 3.5, b = ac.createBuffer(1, n, ac.sampleRate), d = b.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 2.2);
+  const src = ac.createBufferSource(); src.buffer = b;
+  const lp = ac.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.setValueAtTime(5000, t); lp.frequency.exponentialRampToValueAtTime(120, t + 3);
+  const g = ac.createGain(); g.gain.setValueAtTime(0.9, t); g.gain.exponentialRampToValueAtTime(0.001, t + 3.4);
+  src.connect(lp); lp.connect(g); g.connect(ac.destination); src.start(t);
+  const sub = ac.createOscillator(), sg = ac.createGain();
+  sub.frequency.setValueAtTime(90, t); sub.frequency.exponentialRampToValueAtTime(28, t + 2.5);
+  sg.gain.setValueAtTime(0.6, t); sg.gain.exponentialRampToValueAtTime(0.001, t + 2.8);
+  sub.connect(sg); sg.connect(ac.destination); sub.start(t); sub.stop(t + 3);
+}
+function sdDrone(on){
+  const ac = sdAudio(); if (!ac) return;
+  if (on && !sd.drone){
+    const t = ac.currentTime, g = ac.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.22, t + 5);
+    const lp = ac.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 180; lp.Q.value = 4;
+    const os = [33, 33.6, 49.5].map(f => { const o = ac.createOscillator(); o.type = "sawtooth"; o.frequency.value = f; o.connect(lp); o.start(); return o; });
+    const l = ac.createOscillator(), lg = ac.createGain(); l.frequency.value = 0.07; lg.gain.value = 90; l.connect(lg); lg.connect(lp.frequency); l.start();
+    lp.connect(g); g.connect(ac.destination);
+    sd.drone = { g, os: [...os, l] };
+  } else if (!on && sd.drone){
+    const { g, os } = sd.drone, t = ac.currentTime; sd.drone = null;
+    g.gain.cancelScheduledValues(t); g.gain.setValueAtTime(Math.max(g.gain.value, 0.0001), t); g.gain.exponentialRampToValueAtTime(0.0001, t + 2.5);
+    setTimeout(() => os.forEach(o => { try { o.stop(); } catch {} }), 2700);
+  }
+}
+function sdShow(html, cls){ const el = $("sd"); el.className = "sd " + (cls || ""); el.querySelector(".sdMain").innerHTML = html; el.hidden = false; }
+function sdHide(){ $("sd").hidden = true; document.body.classList.remove("sdCount"); }
+
+function selfDestruct(seconds = 5){
+  if (sd.phase === "count") return "이미 자폭 카운트다운 중";
+  if (sd.phase === "hole" || sd.phase === "boom") return "이미 블랙홀 상태";
+  let left = Math.max(3, Math.min(10, Math.round(+seconds || 5)));
+  sd.phase = "count"; sd.prevMood = mood;
+  fire("hologram", "alert");
+  document.body.classList.add("sdCount");
+  const tick = () => {
+    if (sd.phase !== "count") return;
+    if (left <= 0){ detonate(); return; }
+    sdShow(`<small>SELF-DESTRUCT</small><b>${left}</b>`, "count");
+    sdBeep(left <= 2 ? 1320 : 880, 0.25, 0.14); setTimeout(() => sdBeep(left <= 2 ? 990 : 660, 0.2, 0.1), 260);
+    left--; sd.timer = setTimeout(tick, 1000);
+  };
+  tick();
+  return `자폭 카운트다운 시작 (${left}초, 화면 연출일 뿐 데이터는 지우지 않음. '취소'라고 하면 멈춤)`;
+}
+function detonate(){
+  sd.phase = "boom"; sd.boomAt = performance.now();
+  sd.orbT = 0; sd.scatterT = 1; sd.holeT = 0;
+  sdHide(); sdBang();
+  document.body.classList.add("shake", "voidMode"); setTimeout(() => document.body.classList.remove("shake"), 1300);
+  setTimeout(() => { if (sd.phase !== "boom") return; sd.phase = "hole"; sd.holeT = 1; sd.scatterT = 0; sdDrone(true); fire("hologram", "nebula"); }, 2600);
+  setTimeout(() => { if (sd.phase === "hole") sdShow(`<small>SINGULARITY</small><button type="button" id="sdReboot">REBOOT</button>`, "hole"); }, 6500);
+}
+function cancelDestruct(){
+  if (sd.phase !== "count") return false;
+  clearTimeout(sd.timer); sd.phase = "idle"; sdHide(); fire("hologram", sd.prevMood || "calm");
+  sdBeep(520, 0.3, 0.08);
+  return true;
+}
+function rebootOrb(){
+  if (sd.phase === "count"){ cancelDestruct(); return "자폭을 취소했음"; }
+  if (sd.phase !== "hole" && sd.phase !== "boom") return "홀로그램은 이미 정상";
+  sd.phase = "reboot"; sd.holeT = 0; sd.scatterT = 0; sdDrone(false); sdHide();
+  setTimeout(() => { sd.orbT = 1; }, 1500);
+  setTimeout(() => { sd.phase = "idle"; sd.boomAt = 0; document.body.classList.remove("voidMode"); fire("hologram", sd.prevMood === "alert" ? "calm" : sd.prevMood || "calm"); }, 3200);
+  return "블랙홀을 닫고 홀로그램을 다시 모으는 중";
+}
+document.addEventListener("click", (e) => {
+  if (e.target.closest?.("#sdReboot")) rebootOrb();
+  if (e.target.closest?.("#sdCancel")) cancelDestruct();
+});
+addEventListener("keydown", (e) => { if (e.key === "Escape" && sd.phase === "count") cancelDestruct(); });
+function selfDestructTool(i = {}){
+  const a = i.action || "start";
+  if (a === "cancel") return cancelDestruct() ? "자폭을 취소했음" : "진행 중인 자폭이 없음";
+  if (a === "restore") return rebootOrb();
+  return selfDestruct(i.seconds);
+}
+on("self-destruct", (i) => { try { selfDestructTool(i || {}); } catch {} });
+
+// ======================================================================
 //  대화
 // ======================================================================
 let busy = false;
@@ -3339,7 +3468,7 @@ try { if (localStorage.getItem("jarvis.hand") === "on") startHand(); } catch {}
 on("mic-level", (v) => { micLevel = Math.max(0, Math.min(1, +v || 0)); });
 on("hologram", (m) => { if (PALETTES[m]) mood = m; });
 on("tool", (p) => logLine("tool", "", "▸ " + (String(p?.name).startsWith("fallback:") ? "바쁜 모델 대신 " + p.name.slice(9) + " 사용" : (TOOL_NAMES[p?.name] || p?.name))));
-const TOOL_NAMES = { get_datetime:"시각 확인", open_app:"프로그램 실행", open_url:"브라우저 열기", set_volume:"볼륨 조절", set_timer:"타이머 설정", set_hologram:"홀로그램 전환", create_file:"파일 만들기", read_file:"첨부 파일 읽기", open_file_picker:"파일 선택 창", show_file:"파일 다시 보기", add_todo:"할 일 추가", list_todos:"할 일 확인", complete_todo:"할 일 완료", remove_todo:"할 일 삭제", show_todos:"할 일 카드", get_weather:"날씨 확인", remember:"기록하기", recall:"기록 찾기", show_memory:"기록 화면", make_panel:"패널 만들기", play_music:"음악 틀기", music_control:"음악 제어", now_playing:"지금 나오는 곡", close_panel:"패널 닫기", arrange_panel:"화면 배치" };
+const TOOL_NAMES = { get_datetime:"시각 확인", open_app:"프로그램 실행", open_url:"브라우저 열기", set_volume:"볼륨 조절", set_timer:"타이머 설정", set_hologram:"홀로그램 전환", create_file:"파일 만들기", read_file:"첨부 파일 읽기", open_file_picker:"파일 선택 창", show_file:"파일 다시 보기", add_todo:"할 일 추가", list_todos:"할 일 확인", complete_todo:"할 일 완료", remove_todo:"할 일 삭제", show_todos:"할 일 카드", get_weather:"날씨 확인", remember:"기록하기", recall:"기록 찾기", show_memory:"기록 화면", make_panel:"패널 만들기", self_destruct:"자폭 시퀀스", play_music:"음악 틀기", music_control:"음악 제어", now_playing:"지금 나오는 곡", close_panel:"패널 닫기", arrange_panel:"화면 배치" };
 
 const timers = new Map();
 on("timer-set", ({id, label, seconds}) => {
@@ -3784,6 +3913,9 @@ uniform vec4 uPassA[3];   // 지나가는 위성: 시작 xy, 끝 xy (uv 좌표)
 uniform vec3 uPassB[3];   // 진행률 0..1, 밝기, 번쩍임 세기
 uniform float uSpec[32];  // 음악 스펙트럼 (저음→고음)
 uniform float uMusic, uBass;
+uniform float uBoom;      // 폭발 뒤 흐른 초 (없으면 -1)
+uniform float uHole;      // 블랙홀 0..1
+uniform float uOrb;       // 홀로그램 구체·고리 보이는 정도 0..1
 
 float hash(vec2 p){ p = fract(p*vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x*p.y); }
 float noise(vec2 p){
@@ -3824,7 +3956,18 @@ void main(){
 
   // 오브 주변 중력 렌즈 왜곡
   vec2 lens = p/(r*r + .45)*.055*(.6 + .7*uEnergy);
-  vec2 bg = uv - lens*uRadius;
+  vec2 bg = uv - lens*uRadius*uOrb;
+  float HR = .95*uHole;                              // 사건의 지평선 반지름 (구체 반지름 단위)
+  if (uHole > .001){
+    // 강한 중력 렌즈: 가까울수록 하늘이 크게 휘어 구멍 둘레로 감긴다 (아인슈타인 고리)
+    float rs = max(r, .02);
+    bg = uv - (p/rs)*(HR*HR*1.7/rs)*uRadius;
+  }
+  if (uBoom >= 0. && uBoom < 5.){
+    // 충격파가 지나가며 하늘이 출렁인다
+    float Rs = .8 + uBoom*3.6, dd = r - Rs;
+    bg -= (p/max(r, .02))*exp(-dd*dd*10.)*.05*exp(-uBoom*.6)*uRadius;
+  }
 
   // 성운: 도메인 워핑 fbm
   vec2 q = (bg - uLook*.05)*1.55 + vec2(t*.010, -t*.007);
@@ -3860,11 +4003,11 @@ void main(){
 
   // 외곽 헤일로
   float halo = exp(-max(r - 1., 0.)*3.)*(.22 + .45*uEnergy + .35*uLevel);
-  col += uColA*halo*.32*smoothstep(.98, 1.02, r);
+  col += uColA*halo*.32*smoothstep(.98, 1.02, r)*uOrb;
 
   // 음악 파형: 구체 둘레를 감싸는 원형 스펙트럼. 아래가 저음, 위가 고음, 좌우 대칭.
   // 선 두 겹(바깥 밝은 선 + 안쪽 반사선)과 구체까지 이어지는 옅은 빛 기둥, 저음에 맞춰 부푸는 헤일로
-  if (uMusic > .003){
+  if (uMusic*uOrb > .003){
     float th = atan(p.x, -p.y);                       // 아래=0, 위=±π
     float u = clamp(abs(th)/3.14159, 0., 1.);
     float fi = u*31.;
@@ -3879,12 +4022,14 @@ void main(){
     float spoke = exp(-pow((fract(fi + .5) - .5)/.06, 2.))*step(1.015, r)*step(r, R)*.35*v;
     float inner = exp(-pow((r - (1.06 + v*.12))/.004, 2.))*.35;
     vec3 mc = mix(mix(uColA, vec3(1.), .15), uColC, smoothstep(.1, .9, u));
-    col += mc*(line*(.7 + .8*v) + glow*v + fill + spoke + inner*v)*uMusic;
-    col += uColA*exp(-max(r - 1., 0.)*2.2)*uBass*.28*uMusic*smoothstep(.98, 1.02, r);
+    col += mc*(line*(.7 + .8*v) + glow*v + fill + spoke + inner*v)*uMusic*uOrb;
+    col += uColA*exp(-max(r - 1., 0.)*2.2)*uBass*.28*uMusic*uOrb*smoothstep(.98, 1.02, r);
   }
 
   // 홀로그램 구체
-  if (r < 1.){
+  // 다시 모일 때·터질 때 구체는 노이즈 조각으로 생기고 사라진다
+  float shard = smoothstep(1. - uOrb - .08, 1. - uOrb + .08, noise(p*5.5 + 3.)*.8 + .2);
+  if (r < 1. && uOrb > .002){
     float z = sqrt(1. - r*r);
     vec3 n = vec3(p, z);
     float tl = .42 - uLook.y*.6, ct = cos(tl), st = sin(tl);
@@ -3905,7 +4050,7 @@ void main(){
     float pulse = .5 + .5*uSpeak + .9*uLevel + 1.1*uBass*uMusic;
     holo += mix(uColA, vec3(1.), .55)*exp(-r*r*6.5)*.5*pulse;
     holo += uColC*.07*sin(lon*5. + t*1.1 + lat*4.)*fres;
-    col = col*(.42 + .45*r) + holo;
+    col = mix(col, col*(.42 + .45*r) + holo, shard);
   }
 
   // 궤도 링: 끊임없이 세차 회전하고, 각자의 수명 주기마다 구체에서 퍼져 나와 생겼다가
@@ -3942,7 +4087,48 @@ void main(){
     float bead = exp(-da*da*55.)*exp(-pow(d/.028, 2.))*smoothstep(.4, .9, vis);
     float tail = (da < 0. ? exp(da*2.2) : exp(-da*40.))*exp(-pow(d/.014, 2.));
     vec3 rc = mix(uColA, uColC, fi*.28);
-    col += rc*((ring*.5 + glow)*(.4 + .6*uEnergy)*mask + bead*1.5 + tail*.45*mask)*occl*vis;
+    col += rc*((ring*.5 + glow)*(.4 + .6*uEnergy)*mask + bead*1.5 + tail*.45*mask)*occl*vis*uOrb;
+  }
+
+  // 폭발: 섬광 → 불덩이 → 충격파 두 겹 → 방사형 불꽃 줄기
+  if (uBoom >= 0. && uBoom < 6.){
+    float b = uBoom;
+    vec3 hot = vec3(1., .86, .7);
+    col += hot*exp(-b*4.5)*1.3;
+    col += mix(vec3(1., .62, .3), uColA, .25)*exp(-r*r/(.25 + b*4.))*exp(-b*1.2)*2.6;
+    for (int i = 0; i < 2; i++){
+      float fi = float(i), bt = b - fi*.22;
+      if (bt <= 0.) continue;
+      float Rs = .8 + bt*(3.6 - fi*1.4), dd = r - Rs;
+      col += mix(uColA, vec3(1.), .55)*exp(-dd*dd*(90. - fi*55.))*exp(-bt*.85)*(1.4 - fi*.6);
+    }
+    float ang = atan(p.y, p.x);
+    float streak = pow(noise(vec2(ang*8., 1.7)), 5.)*2.2 + pow(noise(vec2(ang*23., 9.1)), 8.)*3.;
+    col += vec3(1., .55, .25)*streak*exp(-abs(r - .3 - b*2.4)*2.2)*exp(-b*.75);
+  }
+
+  // 블랙홀: 검은 지평선 + 광자 고리 + 기울어진 강착 원반(도플러로 한쪽이 더 밝음) + 렌즈로 휘어 위아래로 보이는 원반 뒷면
+  if (uHole > .001){
+    float hz = smoothstep(HR*1.03, HR*.97, r);
+    col *= 1. - hz;
+    float ang = atan(p.y, p.x);
+    float turb = .55 + .45*noise(vec2(ang*4. + t*.9, r*6. - t*1.3));
+    vec3 warmIn = vec3(1., .93, .82), warmOut = vec3(1., .42, .14);
+    col += mix(warmIn, vec3(1.), .3)*exp(-pow((r - HR*1.1)/(.01 + HR*.035), 2.))*1.5*uHole;
+    float k = .23;
+    vec2 dp = vec2(p.x, p.y/k);
+    float dr = length(dp), dang = atan(dp.y, dp.x);
+    float inner = HR*1.45, outer = HR*4.2;
+    float band = smoothstep(inner, inner*1.12, dr)*(1. - smoothstep(outer*.55, outer, dr));
+    float swirl = .45 + .55*noise(vec2(dr*6. - t*2.2, dang*2.5 + t*1.1))*noise(vec2(dr*14. - t*3., dang*6.));
+    float dop = .35 + .65*(.5 + .5*cos(dang + 3.14159));     // 왼쪽(다가오는 쪽)이 더 밝다
+    float behind = p.y > 0. ? 1. - hz : 1.;
+    vec3 dc = mix(warmIn, warmOut, smoothstep(inner, outer*.8, dr));
+    col += dc*band*(.35 + swirl)*dop*behind*(2.6/(1. + dr*.5))*uHole;
+    float arcTop = exp(-pow((r - HR*1.34)/(HR*.24), 2.))*smoothstep(-.15, .75, p.y/max(r, .01));
+    float arcBot = exp(-pow((r - HR*1.2)/(HR*.1), 2.))*smoothstep(-.15, .75, -p.y/max(r, .01))*.4;
+    col += mix(warmIn, warmOut, .4)*(arcTop*1.5 + arcBot*1.3)*turb*uHole;
+    col += warmOut*exp(-max(r - HR, 0.)*1.4)*.08*uHole;    // 주변의 옅은 열기
   }
 
   col += (hash(fc + fract(t)*100.) - .5)*.010;
@@ -3955,12 +4141,17 @@ in vec4 aP;  // 반지름, 시작 각도, 높이, 시드
 uniform vec2 uRes, uCenter;
 uniform float uTime, uEnergy, uLevel, uRadius, uDpr;
 uniform vec2 uLook;
-out float vA; out float vMix;
+uniform float uScatter, uHole, uOrb;
+out float vA; out float vMix; out float vHot;
 void main(){
-  float rr = aP.x;
-  float a = aP.y + uTime*(.85/pow(rr, 1.5))*(.3 + .9*uEnergy);
+  // 폭발하면 파편처럼 바깥으로 흩어지고, 블랙홀이 생기면 안쪽으로 빨려 들어 강착 원반이 된다
+  float spd = .5 + fract(aP.w*91.7)*2.6;
+  float accR = .95*uHole*mix(1.55, 4.2, pow(fract(aP.w*13.7), 1.6));
+  float rr = mix(aP.x + uScatter*spd*2.6, accR, smoothstep(0., 1., uHole));
+  rr = max(rr, .05);
+  float a = aP.y + uTime*(.85/pow(rr, 1.5))*(.3 + .9*uEnergy + 1.6*uHole);
   float br = 1. + .035*sin(uTime*.7 + aP.w*6.283) + uLevel*.10*aP.w;
-  vec3 pos = vec3(cos(a)*rr*br, aP.z, sin(a)*rr*br);
+  vec3 pos = vec3(cos(a)*rr*br, aP.z*(1. - .9*uHole) + aP.z*uScatter*spd*6., sin(a)*rr*br);
   float tl = 1.22 - uLook.y*.5, c = cos(tl), s = sin(tl);
   pos = vec3(pos.x, c*pos.y - s*pos.z, s*pos.y + c*pos.z);
   float ph = -.22 + uLook.x*.32, cp = cos(ph), sp = sin(ph);
@@ -3968,21 +4159,25 @@ void main(){
   float persp = 1./(1. + pos.z*.16);
   vec2 scr = uCenter + pos.xy*persp*uRadius*uRes.y;
   gl_Position = vec4(scr/uRes*2. - 1., 0., 1.);
-  float hidden = (pos.z > 0. && length(pos.xy) < 1.) ? .18 : 1.;
-  gl_PointSize = (1.1 + aP.w*2.3)*persp*uDpr*(1. + uLevel*.5);
-  vA = hidden*(.3 + .7*aP.w)*smoothstep(3.7, 1.7, rr)*(.45 + .55*uEnergy);
+  float occR = max(uOrb, .95*uHole);
+  float hidden = (pos.z > 0. && length(pos.xy) < occR) ? .18*(1. - uHole) : 1.;
+  gl_PointSize = (1.1 + aP.w*2.3)*persp*uDpr*(1. + uLevel*.5)*(1. + uScatter*.6);
+  float fade = mix(1., .35, uScatter);
+  vA = hidden*(.3 + .7*aP.w)*smoothstep(3.7 + uScatter*6., 1.7 + uScatter*5., rr)*(.45 + .55*uEnergy)*max(fade, uHole*1.4)*max(uOrb, max(uHole, uScatter));
+  vHot = max(uHole, uScatter*.7);
   vMix = fract(aP.w*7.13);
 }`;
 
 const P_FS = `#version 300 es
 precision mediump float;
-in float vA; in float vMix;
+in float vA; in float vMix; in float vHot;
 uniform vec3 uColA, uColC;
 out vec4 o;
 void main(){
   float d = length(gl_PointCoord - .5);
   float a = smoothstep(.5, 0., d); a *= a;
-  o = vec4(mix(uColA, uColC, vMix*.55)*a*vA, 0.);
+  vec3 c = mix(mix(uColA, uColC, vMix*.55), mix(vec3(1., .9, .75), vec3(1., .45, .15), vMix), vHot*.85);
+  o = vec4(c*a*vA, 0.);
 }`;
 
 function compile(type, src){
@@ -4113,6 +4308,11 @@ function frame(now){
   gl.uniform1f(su.uSpeak, S.speak); gl.uniform1f(su.uRadius, S.radius);
   gl.uniform3fv(su.uColA, S.A); gl.uniform3fv(su.uColB, S.B); gl.uniform3fv(su.uColC, S.C);
   gl.uniform2f(su.uLook, look.x, look.y);
+  S.orb = ease(S.orb ?? 1, sd.orbT, sd.orbT < S.orb ? 9 : 1.6, dt);
+  S.hole = ease(S.hole ?? 0, sd.holeT, sd.holeT > S.hole ? .45 : 1.5, dt);
+  S.scatter = ease(S.scatter ?? 0, sd.scatterT, sd.scatterT > S.scatter ? 2.2 : .9, dt);
+  const boom = sd.boomAt ? (now - sd.boomAt) / 1000 : -1;
+  gl.uniform1f(su.uBoom, boom); gl.uniform1f(su.uHole, S.hole); gl.uniform1f(su.uOrb, S.orb);
   music.update(dt, clock);
   if (su["uSpec[0]"]){ gl.uniform1fv(su["uSpec[0]"], music.spec); gl.uniform1f(su.uMusic, music.amt); gl.uniform1f(su.uBass, music.bass); }
   updatePassers(now);
@@ -4127,6 +4327,7 @@ function frame(now){
   gl.uniform1f(pu.uRadius, S.radius); gl.uniform1f(pu.uDpr, dpr);
   gl.uniform3fv(pu.uColA, S.A); gl.uniform3fv(pu.uColC, S.C);
   gl.uniform2f(pu.uLook, look.x, look.y);
+  gl.uniform1f(pu.uScatter, S.scatter); gl.uniform1f(pu.uHole, S.hole); gl.uniform1f(pu.uOrb, S.orb);
   gl.drawArrays(gl.POINTS, 0, N);
 
   requestAnimationFrame(frame);
