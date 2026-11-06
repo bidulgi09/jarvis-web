@@ -7,11 +7,53 @@ use crate::todo::Todos;
 use anyhow::{bail, Context, Result};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
+use std::sync::OnceLock;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
+use tokio::sync::oneshot;
+
+// ---------- 화면이 대신 처리하는 도구 (Spotify처럼 토큰이 웹뷰에 있는 것) ----------
+
+type Reply = oneshot::Sender<std::result::Result<String, String>>;
+fn pending() -> &'static std::sync::Mutex<HashMap<u64, Reply>> {
+    static P: OnceLock<std::sync::Mutex<HashMap<u64, Reply>>> = OnceLock::new();
+    P.get_or_init(Default::default)
+}
+
+/// 화면에 도구 실행을 맡기고 결과를 기다린다 (최대 25초)
+async fn ask_ui(app: &AppHandle, name: &str, input: &Value) -> Result<String> {
+    static NEXT: AtomicU64 = AtomicU64::new(1);
+    let id = NEXT.fetch_add(1, Ordering::Relaxed);
+    let (tx, rx) = oneshot::channel();
+    pending()
+        .lock()
+        .map_err(|_| anyhow::anyhow!("잠금 실패"))?
+        .insert(id, tx);
+    let _ = app.emit("ui-tool", json!({ "id": id, "name": name, "input": input }));
+    let out = tokio::time::timeout(Duration::from_secs(25), rx).await;
+    if let Ok(mut p) = pending().lock() {
+        p.remove(&id);
+    }
+    match out {
+        Ok(Ok(Ok(v))) => Ok(v),
+        Ok(Ok(Err(e))) => bail!("{e}"),
+        _ => bail!("화면이 응답하지 않습니다"),
+    }
+}
+
+/// 화면이 ui-tool 결과를 돌려줄 때 (main.rs의 ui_tool_reply 명령)
+pub fn ui_reply(id: u64, result: std::result::Result<String, String>) {
+    if let Some(tx) = pending().lock().ok().and_then(|mut p| p.remove(&id)) {
+        let _ = tx.send(result);
+    }
+}
+
+pub const UI_TOOLS: [&str; 3] = ["play_music", "music_control", "now_playing"];
 
 pub struct Toolbox {
     apps: BTreeMap<String, String>,
@@ -232,6 +274,35 @@ pub fn schemas(tb: &Toolbox) -> Value {
             "name": "get_weather",
             "description": "현재 날씨와 4일 예보를 가져와 화면에 날씨 카드를 띄운다. place는 지역 이름(예: 대구, 서울 강남구). 사용자가 지역을 말하지 않았으면 비운다.",
             "input_schema": { "type": "object", "properties": { "place": { "type": "string" } } }
+        },
+        {
+            "name": "play_music",
+            "description": "Spotify에서 음악을 찾아 튼다. query는 곡·가수·앨범·플레이리스트 이름이나 분위기(예: 비 오는 날 재즈). kind는 track(곡), artist(가수 곡들), album, playlist. source=my_playlists면 내 플레이리스트에서, liked면 좋아요한 곡을 튼다.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "query": { "type": "string" },
+                    "kind": { "type": "string", "enum": ["track", "artist", "album", "playlist"] },
+                    "source": { "type": "string", "enum": ["search", "my_playlists", "liked"] }
+                }
+            }
+        },
+        {
+            "name": "music_control",
+            "description": "Spotify 재생 제어. action: pause, resume, next, previous, volume(value 0~100), shuffle(value 1=켜기 0=끄기), real_wave(value 1=진짜 파형 켜기 0=끄기).",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "action": { "type": "string", "enum": ["pause", "resume", "next", "previous", "volume", "shuffle", "real_wave"] },
+                    "value": { "type": "number" }
+                },
+                "required": ["action"]
+            }
+        },
+        {
+            "name": "now_playing",
+            "description": "지금 Spotify에서 나오는 곡 정보를 가져온다.",
+            "input_schema": { "type": "object", "properties": {} }
         },
         {
             "name": "make_panel",
@@ -505,6 +576,8 @@ pub async fn run(app: &AppHandle, tb: &Toolbox, name: &str, input: &Value) -> Re
             Ok(w.to_string())
         }
 
+        n if UI_TOOLS.contains(&n) => ask_ui(app, n, input).await,
+
         // 패널은 화면(웹뷰)이 그린다
         "make_panel" => {
             let title = input["title"].as_str().unwrap_or("패널");
@@ -641,7 +714,7 @@ fn launch_app(target: &str) -> Result<()> {
     Ok(())
 }
 
-fn open_url(url: &str) -> Result<()> {
+pub fn open_url(url: &str) -> Result<()> {
     let mut cmd;
     if cfg!(target_os = "windows") {
         // cmd start는 &를 명령 구분자로 읽으므로 rundll32로 연다

@@ -4,6 +4,7 @@
 mod audio;
 mod brain;
 mod memory;
+mod music;
 mod stt;
 mod todo;
 mod tools;
@@ -16,6 +17,7 @@ use tauri::{AppHandle, State};
 
 struct AppState {
     recording: Mutex<Option<audio::Recording>>,
+    loopback: Mutex<Option<music::Loopback>>,
     stt: stt::Stt,
     brain: brain::Brain,
 }
@@ -189,6 +191,33 @@ fn set_city(state: State<'_, AppState>, city: String) -> Result<(), String> {
         .map_err(|e| format!("{e:#}"))
 }
 
+// ---------- 음악 ----------
+
+/// 기본 브라우저로 Spotify 로그인을 열고, 돌아온 주소의 쿼리를 화면에 돌려준다
+#[tauri::command]
+async fn spotify_auth(url: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || music::spotify_auth(&url))
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| format!("{e:#}"))
+}
+
+#[tauri::command]
+fn ui_tool_reply(id: u64, ok: Option<String>, error: Option<String>) {
+    tools::ui_reply(id, ok.ok_or_else(|| error.unwrap_or_else(|| "실패".into())));
+}
+
+/// 스피커 소리로 진짜 파형 그리기 켜기/끄기 (윈도우)
+#[tauri::command]
+fn music_capture(app: AppHandle, state: State<'_, AppState>, on: bool) -> Result<(), String> {
+    let mut slot = state.loopback.lock().map_err(|_| "잠금 실패".to_string())?;
+    *slot = None;
+    if on {
+        *slot = Some(music::Loopback::start(app).map_err(|e| format!("{e:#}"))?);
+    }
+    Ok(())
+}
+
 #[tauri::command]
 async fn reset(state: State<'_, AppState>) -> Result<(), String> {
     state.brain.reset().await;
@@ -236,6 +265,7 @@ fn main() {
     tauri::Builder::default()
         .manage(AppState {
             recording: Mutex::new(None),
+            loopback: Mutex::new(None),
             stt,
             brain,
         })
@@ -252,7 +282,10 @@ fn main() {
             todo_toggle,
             todo_remove,
             todo_clear_done,
-            set_city
+            set_city,
+            spotify_auth,
+            ui_tool_reply,
+            music_capture
         ])
         .run(tauri::generate_context!())
         .expect("자비스를 시작하지 못했습니다");

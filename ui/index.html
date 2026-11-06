@@ -174,6 +174,25 @@ math[display="block"]{display:block;margin:.2em 0}
 .sheet input:focus,.sheet select:focus{outline:none;border-color:rgba(127,243,255,.55)}
 .sheet .note{margin:2px 0 0;font-size:12px;line-height:1.5;color:var(--dim)}
 .sheet .note a{color:var(--holo)}
+.sheet .note code{font-family:var(--f-mono);font-size:11px;color:var(--ink);background:rgba(127,243,255,.08);border-radius:5px;padding:1px 5px;overflow-wrap:anywhere}
+.sheet .mini{background:none;border:1px solid var(--faint);border-radius:6px;color:var(--holo);font-family:var(--f-mono);font-size:10px;padding:1px 6px;cursor:pointer}
+.spRow{display:flex;gap:8px}.spRow input{flex:1;min-width:0}
+.spRow button{flex:none;background:rgba(127,243,255,.1);border:1px solid rgba(127,243,255,.4);border-radius:10px;color:var(--holo);font-family:var(--f-mono);font-size:11px;padding:0 12px;cursor:pointer}
+.spState{color:var(--holo);letter-spacing:0;margin-left:6px}
+/* NOW PLAYING */
+.np .npMain{display:flex;gap:12px;align-items:center;padding:0 12px 6px}
+.np img{width:54px;height:54px;border-radius:8px;object-fit:cover;flex:none;box-shadow:0 0 24px rgba(127,243,255,.2)}
+.np .npTxt{min-width:0;flex:1}
+.np .npTxt b{display:block;font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.np .npTxt span{display:block;font-size:12px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.np .npProg{margin:4px 12px 0;height:3px;border-radius:2px;background:rgba(127,243,255,.12);overflow:hidden}
+.np .npProg i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--holo),rgba(242,140,255,.9));transition:width .5s linear}
+.np .npCtl{display:flex;align-items:center;gap:6px;padding:6px 10px 10px}
+.np .npCtl small{font-family:var(--f-mono);font-size:10px;color:var(--dim);flex:1;padding-left:2px;white-space:nowrap;min-width:0;overflow:hidden}
+.np .npCtl button{background:none;border:1px solid var(--faint);border-radius:999px;color:var(--ink);cursor:pointer;font-size:11px;min-width:30px;height:28px;padding:0 9px}
+.np .npCtl button:hover{border-color:var(--holo)}
+.np #npWave{font-family:var(--f-mono);font-size:10px;color:var(--dim)}
+.np #npWave.on{color:var(--holo);border-color:rgba(127,243,255,.5)}
 .sheet{max-height:calc(100vh - 32px);overflow-y:auto}
 .diag{display:flex;gap:8px;flex-wrap:wrap}
 body.app .webOnly, body.app .webOnlyBtn{display:none}
@@ -356,6 +375,12 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--holo);outline-o
     <div class="log" id="log" aria-live="polite"></div>
     <div class="rcol" id="rcol">
       <div class="timers" id="timers"></div>
+      <section class="card np" id="np" hidden aria-label="지금 재생 중">
+        <header><b>NOW PLAYING</b><span class="sub" id="npDev"></span><button type="button" id="npClose" aria-label="음악 카드 닫기">✕</button></header>
+        <div class="npMain"><img id="npArt" alt="" hidden><div class="npTxt"><b id="npTitle"></b><span id="npArtist"></span></div></div>
+        <div class="npProg"><i id="npBar"></i></div>
+        <div class="npCtl"><small id="npTime"></small><button type="button" id="npWave" title="실제 소리에 맞춰 파형 그리기 (소리 공유 허락 필요)">진짜 파형</button><button type="button" id="npPrev" aria-label="이전 곡">⏮︎</button><button type="button" id="npPlay" aria-label="재생">▶</button><button type="button" id="npNext" aria-label="다음 곡">⏭︎</button></div>
+      </section>
       <section class="card wx" id="wx" hidden aria-label="날씨">
         <header><b>WEATHER</b><span class="sub" id="wxPlace"></span><button type="button" id="wxClose" aria-label="날씨 닫기">✕</button></header>
         <div class="now"><div class="sym" id="wxSym"></div><div class="temp" id="wxTemp"></div><div class="desc" id="wxDesc"></div></div>
@@ -509,6 +534,10 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--holo);outline-o
     <label for="cfgCity">날씨 기본 지역</label>
     <input id="cfgCity" type="text" placeholder="예: 대구, 서울 강남구, Tokyo" spellcheck="false">
     <p class="note">비워 두면 날씨를 물을 때 기기 위치를 쓸지 물어봅니다. 날씨는 Open-Meteo(무료, 키 없음)에서 가져옵니다.</p>
+    <label for="cfgSpotify">Spotify Client ID <span id="spState" class="spState"></span></label>
+    <div class="spRow"><input id="cfgSpotify" type="text" placeholder="32자리 (developer.spotify.com)" spellcheck="false" autocomplete="off"><button type="button" id="spLink">Spotify 연결</button></div>
+    <p class="note">Premium 계정 필요. <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">developer.spotify.com/dashboard</a> → Create app →
+      Redirect URI에 <code id="spRedirect"></code> <button type="button" id="spCopy" class="mini">복사</button> 를 넣고, Web API와 Web Playback SDK를 체크 → Client ID를 위에 붙여 넣기.</p>
     <label for="cfgAmb">배경음 크기</label>
     <input id="cfgAmb" type="range" min="0" max="100" step="1">
     <label for="cfgTts">목소리</label>
@@ -649,6 +678,7 @@ function webSystemPrompt(){
 할 일을 말하면 add_todo로 추가하고(마감이 있으면 due에 YYYY-MM-DD), 끝냈다고 하면 complete_todo, 할 일을 물으면 list_todos를 쓴다.
 날씨를 물으면 get_weather를 쓴다. 지역을 말하지 않았으면 place를 비운다.
 너는 화면에 스스로 UI를 만들 수 있다. 답이 표·비교·단계·일정·수치 정리처럼 구조가 있거나 사용자가 한동안 보면서 쓸 내용이면, 긴 말 대신 make_panel로 패널을 띄우고 말로는 한두 문장만 한다. 계산·단위 변환·그래프·연습 문제처럼 직접 만지면 좋은 것은 kind=html로 작은 도구를 만든다. 매번은 아니고 정말 도움이 될 때만 쓴다(가벼운 잡담·짧은 답에는 쓰지 않는다). 이미 있는 패널과 같은 주제면 같은 id로 고친다. 패널을 옮겨 달라면 arrange_panel을 쓴다.
+음악을 틀어 달라면 play_music(가수만 말하면 kind=artist, 분위기를 말하면 kind=playlist), 멈춤·다음 곡·볼륨은 music_control, 지금 나오는 곡을 물으면 now_playing을 쓴다. 곡을 틀었으면 무엇을 틀었는지 한 문장으로만 말한다. Spotify가 연결 안 되어 있으면 SETTINGS에서 연결하라고 안내한다.
 지금 떠 있는 패널: ${genPanels.length ? genPanels.map(p => p.title + "(id " + p.id.slice(2) + ")").join(", ") : "없음"}
 사용자의 말은 음성 인식 결과라 오타가 있을 수 있으니 의도를 추론한다.
 타이머, 홀로그램 분위기, 링크 열기, 파일 만들기, 시각 확인은 반드시 도구를 호출해서 처리한다.
@@ -790,6 +820,15 @@ const WEB_TOOLS = [
   { name: "get_weather", description: "현재 날씨와 4일 예보를 가져와 화면에 날씨 카드를 띄운다. place는 지역 이름(예: 대구, 서울 강남구). 사용자가 지역을 말하지 않았으면 비운다.",
     input_schema: { type: "object", properties: { place: { type: "string" } } },
     run: async (i) => JSON.stringify(await getWeather(i.place)) },
+  { name: "play_music", description: "Spotify에서 음악을 찾아 튼다. query는 곡·가수·앨범·플레이리스트 이름이나 분위기(예: 비 오는 날 재즈). kind는 track(곡), artist(가수 곡들), album, playlist. source=my_playlists면 내 플레이리스트에서, liked면 좋아요한 곡을 튼다.",
+    input_schema: { type: "object", properties: { query: { type: "string" }, kind: { type: "string", enum: ["track", "artist", "album", "playlist"] }, source: { type: "string", enum: ["search", "my_playlists", "liked"] } } },
+    run: (i) => spotify.play(i) },
+  { name: "music_control", description: "Spotify 재생 제어. action: pause, resume, next, previous, volume(value 0~100), shuffle(value 1=켜기 0=끄기), real_wave(value 1=진짜 파형 켜기 0=끄기).",
+    input_schema: { type: "object", properties: { action: { type: "string", enum: ["pause", "resume", "next", "previous", "volume", "shuffle", "real_wave"] }, value: { type: "number" } }, required: ["action"] },
+    run: (i) => spotify.control(i) },
+  { name: "now_playing", description: "지금 Spotify에서 나오는 곡 정보를 가져온다.",
+    input_schema: { type: "object", properties: {} },
+    run: () => spotify.nowPlaying() },
   { name: "make_panel", description: "화면에 직접 만든 패널(작은 UI)을 띄운다. 표·비교·단계·일정·요약처럼 한동안 보면 좋은 정보는 kind=markdown(수식·코드 가능). 계산기·변환기·차트·체크리스트·연습 문제처럼 만지면 좋은 도구는 kind=html(HTML+인라인 CSS·JS, 외부 통신 불가, 차트가 필요하면 cdnjs의 Chart.js script 태그 사용 가능, 배경은 투명·어두운 화면 기준). 같은 id를 주면 그 패널 내용을 고친다. width=wide는 넓은 패널.",
     input_schema: { type: "object", properties: { title: { type: "string" }, kind: { type: "string", enum: ["markdown", "html"] }, content: { type: "string" }, id: { type: "string" }, width: { type: "string", enum: ["normal", "wide"] } }, required: ["title", "kind", "content"] },
     run: (i) => makePanel(i) },
@@ -1361,7 +1400,7 @@ let voiceOn = true;
 try { voiceOn = localStorage.getItem("jarvis.voice") !== "off"; } catch {}
 
 const STATE_LABEL = { idle:"STANDBY", listening:"LISTENING", thinking:"PROCESSING", speaking:"SPEAKING" };
-function setMode(m){ mode = m; const el = $("state"); el.dataset.m = m; el.textContent = STATE_LABEL[m]; if (typeof ambient !== "undefined") ambient.duckFor(m); }
+function setMode(m){ mode = m; const el = $("state"); el.dataset.m = m; el.textContent = STATE_LABEL[m]; if (typeof ambient !== "undefined") ambient.duckFor(m); if (typeof spotify !== "undefined") spotify.duck(m === "listening" || m === "speaking"); }
 
 // ======================================================================
 //  자막 / 로그
@@ -2429,7 +2468,8 @@ const ambient = (() => {
     }
     bellTimer = setTimeout(bell, 3500 + Math.random() * 6500);
   }
-  const level = () => (on ? vol * 0.55 * duck : 0);
+  let mduck = 1;
+  const level = () => (on ? vol * 0.55 * duck * mduck : 0);
   function apply(tc = 1.2){ if (ctx) master.gain.setTargetAtTime(level(), ctx.currentTime, tc); }
 
   return {
@@ -2452,6 +2492,7 @@ const ambient = (() => {
     },
     setVolume(v){ vol = Math.max(0, Math.min(1, v)); apply(0.3); },
     duckFor(mode){ duck = DUCK[mode] ?? 1; apply(mode === "listening" ? 0.15 : 0.9); },
+    musicDuck(playing){ const t = playing ? 0.1 : 1; if (t !== mduck){ mduck = t; apply(1.5); } },
   };
 })();
 
@@ -2728,6 +2769,334 @@ on("panel-arrange", (a) => { try { arrangePanel(a); } catch {} });
 genPanels.forEach(renderPanel);
 
 // ======================================================================
+//  Spotify 연동 (Premium 필요)
+//   로그인: PKCE (비밀 키 없이 Client ID만). 웹은 이 페이지로 돌아오고, 앱은 127.0.0.1:43821로 돌아온다.
+//   재생: 브라우저 안 'J.A.R.V.I.S.' 플레이어(Web Playback SDK)가 준비되면 거기로,
+//         아니면 켜져 있는 Spotify 앱(폰·PC)을 원격으로 조종한다.
+// ======================================================================
+const SP_KEY = "jarvis.spotify", SP_PKCE = "jarvis.spotify.pkce";
+const SP_SCOPES = "streaming user-read-email user-read-private user-read-playback-state user-modify-playback-state user-read-currently-playing playlist-read-private playlist-read-collaborative user-library-read";
+const spRedirect = () => isApp ? "http://127.0.0.1:43821/callback" : location.origin + location.pathname;
+const b64url = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+const randStr = (n) => b64url(crypto.getRandomValues(new Uint8Array(n))).slice(0, n);
+
+const spotify = (() => {
+  let tok = (() => { try { return JSON.parse(localStorage.getItem(SP_KEY) || "null"); } catch { return null; } })();
+  const saveTok = () => { try { tok ? localStorage.setItem(SP_KEY, JSON.stringify(tok)) : localStorage.removeItem(SP_KEY); } catch {} };
+  let player = null, sdkDevice = null, sdkState = null, refreshing = null;
+
+  async function tokenRequest(params){
+    let r;
+    try { r = await fetch("https://accounts.spotify.com/api/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams(params) }); }
+    catch { throw new Error("Spotify 서버에 연결하지 못했습니다."); }
+    const v = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error("Spotify 로그인 실패: " + (v.error_description || v.error || r.status));
+    tok = { access: v.access_token, refresh: v.refresh_token || tok?.refresh, exp: Date.now() + (v.expires_in || 3600) * 1000, client: params.client_id };
+    saveTok(); fire("spotify-auth", true);
+    return tok.access;
+  }
+  async function token(){
+    if (!tok?.refresh) throw new Error("Spotify가 연결되어 있지 않습니다. SETTINGS에서 Spotify 연결을 눌러 주세요.");
+    if (tok.access && Date.now() < tok.exp - 60000) return tok.access;
+    refreshing ||= tokenRequest({ grant_type: "refresh_token", refresh_token: tok.refresh, client_id: tok.client || cfg.spotifyId })
+      .catch((e) => { if (/invalid_grant|revoked/i.test(e.message)){ tok = null; saveTok(); fire("spotify-auth", false); } throw e; })
+      .finally(() => { refreshing = null; });
+    return refreshing;
+  }
+  async function finish(query){
+    const q = new URLSearchParams(query);
+    let saved = null; try { saved = JSON.parse(sessionStorage.getItem(SP_PKCE) || localStorage.getItem(SP_PKCE) || "null"); } catch {}
+    try { sessionStorage.removeItem(SP_PKCE); localStorage.removeItem(SP_PKCE); } catch {}
+    if (q.get("error")) throw new Error(q.get("error") === "access_denied" ? "Spotify 연결을 취소했습니다." : "Spotify 로그인 오류: " + q.get("error"));
+    if (!saved || saved.state !== q.get("state")) throw new Error("로그인 확인값이 맞지 않습니다. 다시 연결해 주세요.");
+    await tokenRequest({ grant_type: "authorization_code", code: q.get("code"), redirect_uri: spRedirect(), client_id: saved.client, code_verifier: saved.verifier });
+  }
+  async function login(){
+    const client = String(cfg.spotifyId || "").trim();
+    if (!/^[0-9a-f]{32}$/i.test(client)) throw new Error("SETTINGS에 Spotify Client ID(32자리)를 먼저 넣어 주세요.");
+    const verifier = randStr(64), state = randStr(16);
+    const challenge = b64url(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)));
+    const rec = JSON.stringify({ verifier, state, client });
+    try { sessionStorage.setItem(SP_PKCE, rec); localStorage.setItem(SP_PKCE, rec); } catch {}
+    const url = "https://accounts.spotify.com/authorize?" + new URLSearchParams({ client_id: client, response_type: "code", redirect_uri: spRedirect(), code_challenge_method: "S256", code_challenge: challenge, scope: SP_SCOPES, state });
+    if (isApp) await finish(await T.core.invoke("spotify_auth", { url }));
+    else location.assign(url);
+  }
+  // 웹: 로그인하고 돌아온 주소(?code=…)를 처리
+  async function handleRedirect(){
+    if (isApp) return;
+    const q = new URLSearchParams(location.search);
+    if (!q.has("code") && !(q.has("error") && q.has("state"))) return;
+    history.replaceState(null, "", location.pathname + location.hash);
+    try { await finish(q.toString()); logLine("j", "", "Spotify에 연결했습니다, 주인님."); }
+    catch (e) { logLine("err", "", e.message); }
+  }
+
+  async function api(method, path, body, retried){
+    const t = await token();
+    let r;
+    try { r = await fetch("https://api.spotify.com/v1" + path, { method, headers: { Authorization: "Bearer " + t, ...(body ? { "Content-Type": "application/json" } : {}) }, body: body ? JSON.stringify(body) : undefined }); }
+    catch { throw new Error("Spotify 서버에 연결하지 못했습니다."); }
+    if (r.status === 204 || r.status === 202) return null;
+    if (r.status === 401 && !retried){ tok.exp = 0; return api(method, path, body, true); }
+    if (r.status === 429 && !retried){ const s = Math.min(10, +r.headers.get("Retry-After") || 2); await new Promise(ok => setTimeout(ok, s * 1000)); return api(method, path, body, true); }
+    const txt = await r.text(); let v = null; try { v = txt ? JSON.parse(txt) : null; } catch {}
+    if (!r.ok){
+      const reason = v?.error?.reason, msg = v?.error?.message || r.status;
+      if (reason === "NO_ACTIVE_DEVICE" || r.status === 404 && /device/i.test(msg)) throw new Error("음악을 틀 기기가 없습니다. 폰이나 PC에서 Spotify 앱을 한 번 열어 주세요.");
+      if (reason === "PREMIUM_REQUIRED" || r.status === 403 && /premium/i.test(msg)) throw new Error("이 기능은 Spotify Premium 계정이 필요합니다.");
+      if (r.status === 403) throw new Error("Spotify가 거절했습니다: " + msg + " (개발자 대시보드 User Management에 내 계정이 있는지 확인)");
+      throw new Error("Spotify 오류: " + msg);
+    }
+    return v;
+  }
+
+  // 브라우저 안 플레이어
+  function loadSdk(){
+    if (player || !tok?.refresh) return;   // 앱(WebView)에서 보호 콘텐츠 재생이 안 되면 원격 조종으로 넘어간다
+    window.onSpotifyWebPlaybackSDKReady = () => {
+      player = new Spotify.Player({ name: "J.A.R.V.I.S.", getOAuthToken: (cb) => token().then(cb, () => {}), volume: 0.7 });
+      player.addListener("ready", ({ device_id }) => { sdkDevice = device_id; fire("music-state"); });
+      player.addListener("not_ready", () => { sdkDevice = null; });
+      player.addListener("player_state_changed", (st) => { sdkState = st; fire("music-state"); });
+      for (const ev of ["initialization_error", "authentication_error", "account_error"])
+        player.addListener(ev, ({ message }) => { sdkDevice = null; logLine("tool", "", "▸ 브라우저 플레이어를 못 씀 (" + message + ") · Spotify 앱 원격 조종으로 전환"); });
+      player.addListener("playback_error", ({ message }) => logLine("err", "", "재생 오류: " + message));
+      player.connect();
+    };
+    const s = document.createElement("script"); s.src = "https://sdk.scdn.co/spotify-player.js"; s.async = true;
+    s.onerror = () => logLine("tool", "", "▸ Spotify 플레이어를 불러오지 못함 · Spotify 앱 원격 조종으로 사용");
+    document.head.append(s);
+  }
+  // 모바일·사파리는 사용자가 누른 순간에 한 번 깨워야 소리가 난다
+  addEventListener("pointerdown", () => { try { player?.activateElement?.(); } catch {} }, { capture: true });
+
+  async function pickDevice(){
+    if (sdkDevice) return { id: sdkDevice, name: "J.A.R.V.I.S." };
+    const v = await api("GET", "/me/player/devices");
+    const ds = (v?.devices || []).filter(d => !d.is_restricted);
+    const d = ds.find(x => x.is_active) || ds[0];
+    if (!d) throw new Error("음악을 틀 기기가 없습니다. 폰이나 PC에서 Spotify 앱을 열어 두거나, 이 화면을 한 번 누른 뒤 다시 말씀해 주세요.");
+    return d;
+  }
+  const artistNames = (a) => (a || []).map(x => x.name).join(", ");
+  async function play({ query = "", kind, source } = {}){
+    query = String(query || "").trim();
+    let body, label;
+    if (source === "liked"){
+      const v = await api("GET", "/me/tracks?limit=50");
+      const uris = (v?.items || []).map(x => x.track?.uri).filter(Boolean);
+      if (!uris.length) throw new Error("좋아요한 곡이 없습니다.");
+      for (let i = uris.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); [uris[i], uris[j]] = [uris[j], uris[i]]; }
+      body = { uris }; label = "좋아요한 곡 " + uris.length + "곡";
+    } else if (source === "my_playlists"){
+      const v = await api("GET", "/me/playlists?limit=50");
+      const ql = query.toLowerCase().replace(/\s+/g, "");
+      const ps = (v?.items || []).filter(Boolean);
+      const hit = ps.find(p => p.name.toLowerCase().replace(/\s+/g, "") === ql) || ps.find(p => p.name.toLowerCase().replace(/\s+/g, "").includes(ql)) || (!ql && ps[0]);
+      if (!hit) throw new Error(`'${query}' 플레이리스트가 없습니다. 있는 것: ${ps.slice(0, 8).map(p => p.name).join(", ")}`);
+      body = { context_uri: hit.uri }; label = "플레이리스트 " + hit.name;
+    } else {
+      if (!query) throw new Error("무엇을 틀지 알려 주세요.");
+      const types = kind ? [kind] : ["track"];
+      const v = await api("GET", `/search?${new URLSearchParams({ q: query, type: types.join(","), limit: "5" })}`);
+      const pick = (k) => (v?.[k + "s"]?.items || []).filter(Boolean)[0];
+      const t = types[0], it = pick(t);
+      if (!it) throw new Error(`'${query}'에 맞는 ${{ track: "곡", artist: "가수", album: "앨범", playlist: "플레이리스트" }[t]}을(를) 찾지 못했습니다.`);
+      if (t === "track"){ body = { uris: [it.uri] }; label = `${it.name} — ${artistNames(it.artists)}`; }
+      else { body = { context_uri: it.uri }; label = t === "artist" ? `${it.name}의 곡들` : t === "album" ? `앨범 ${it.name} — ${artistNames(it.artists)}` : `플레이리스트 ${it.name}`; }
+    }
+    const d = await pickDevice();
+    await api("PUT", "/me/player/play?device_id=" + encodeURIComponent(d.id), body);
+    music.playing = true; setTimeout(refresh, 900); setTimeout(refresh, 2500);
+    return `재생: ${label} (기기: ${d.name})`;
+  }
+  async function control({ action, value } = {}){
+    const dq = sdkDevice ? "?device_id=" + sdkDevice : "";
+    switch (action){
+      case "pause": await api("PUT", "/me/player/pause" + dq); music.playing = false; break;
+      case "resume": await api("PUT", "/me/player/play" + dq); music.playing = true; break;
+      case "next": await api("POST", "/me/player/next" + dq); break;
+      case "previous": await api("POST", "/me/player/previous" + dq); break;
+      case "volume": { const v = Math.max(0, Math.min(100, Math.round(+value || 0))); await api("PUT", `/me/player/volume?volume_percent=${v}` + (sdkDevice ? "&device_id=" + sdkDevice : "")); setTimeout(refresh, 600); return `볼륨 ${v}%`; }
+      case "shuffle": await api("PUT", `/me/player/shuffle?state=${value ? "true" : "false"}` + (sdkDevice ? "&device_id=" + sdkDevice : "")); return value ? "셔플 켬" : "셔플 끔";
+      case "real_wave": return value ? (await music.startReal(), "진짜 파형을 켰음") : (music.stopReal(), "진짜 파형을 껐음");
+      default: throw new Error("알 수 없는 동작: " + action);
+    }
+    setTimeout(refresh, 700);
+    return { pause: "일시정지", resume: "다시 재생", next: "다음 곡", previous: "이전 곡" }[action];
+  }
+  let npCache = null;
+  async function refresh(){
+    if (!tok?.refresh) return null;
+    try {
+      const v = await api("GET", "/me/player?additional_types=track,episode");
+      npCache = v && v.item ? {
+        title: v.item.name, artist: artistNames(v.item.artists) || v.item.show?.name || "", album: v.item.album?.name || "",
+        art: (v.item.album?.images || v.item.images || []).slice(-2)[0]?.url || "", playing: !!v.is_playing,
+        progress: v.progress_ms || 0, duration: v.item.duration_ms || 0, at: Date.now(), device: v.device?.name || "", volume: v.device?.volume_percent,
+      } : null;
+    } catch { return npCache; }
+    music.playing = !!npCache?.playing; fire("music-state");
+    return npCache;
+  }
+  async function nowPlaying(){
+    const n = await refresh();
+    if (!n) return "지금 재생 중인 곡 없음";
+    return JSON.stringify({ title: n.title, artist: n.artist, album: n.album, playing: n.playing, position: `${Math.floor(n.progress / 60000)}:${String(Math.floor(n.progress / 1000) % 60).padStart(2, "0")}`, device: n.device });
+  }
+  function fromSdk(){
+    const st = sdkState; if (!st?.track_window?.current_track) return null;
+    const t = st.track_window.current_track;
+    return { title: t.name, artist: artistNames(t.artists), album: t.album?.name || "", art: (t.album?.images || []).slice(-2)[0]?.url || "",
+      playing: !st.paused, progress: st.position, duration: st.duration, at: Date.now(), device: "J.A.R.V.I.S." };
+  }
+  return {
+    get linked(){ return !!tok?.refresh; }, get sdkReady(){ return !!sdkDevice; },
+    login, handleRedirect, loadSdk, play, control, nowPlaying, refresh,
+    current(){ return (sdkDevice && sdkState ? fromSdk() : null) || npCache; },
+    logout(){ tok = null; saveTok(); try { player?.disconnect(); } catch {} player = null; sdkDevice = null; npCache = null; music.playing = false; fire("spotify-auth", false); fire("music-state"); },
+    duck(on){ try { player?.setVolume(on ? 0.15 : 0.7); } catch {} },
+  };
+})();
+
+// ======================================================================
+//  음악 파형: 구체 둘레의 원형 스펙트럼 32칸
+//   기본은 흉내 파형(재생 중일 때 박자처럼). '진짜 파형'을 켜면
+//   웹: 탭·시스템 소리 공유(getDisplayMedia)로 실제 소리를 분석, 앱(윈도우): 스피커 소리를 직접 들음.
+// ======================================================================
+const music = {
+  playing: false, real: false, spec: new Float32Array(32), bass: 0, amt: 0,
+  _an: null, _stream: null, _bins: null, _ext: null, _extAt: 0, _seed: Math.random() * 100,
+  async startReal(){
+    if (this.real) return;
+    if (isApp){
+      try { await T.core.invoke("music_capture", { on: true }); this.real = "app"; fire("music-state"); return; }
+      catch (e) { if (!navigator.mediaDevices?.getDisplayMedia) throw new Error(String(e)); }
+    }
+    if (!navigator.mediaDevices?.getDisplayMedia) throw new Error("이 브라우저는 소리 공유를 지원하지 않습니다 (PC의 크롬·엣지에서 됩니다).");
+    let st;
+    try {
+      st = await navigator.mediaDevices.getDisplayMedia({ video: { width: 2, height: 2, frameRate: 1 }, audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+        systemAudio: "include", selfBrowserSurface: "include", preferCurrentTab: false, surfaceSwitching: "include" });
+    } catch (e) { throw new Error(e?.name === "NotAllowedError" ? "소리 공유를 취소했습니다." : "소리 공유를 시작하지 못했습니다: " + (e?.message || e)); }
+    st.getVideoTracks().forEach(t => t.stop());
+    const at = st.getAudioTracks()[0];
+    if (!at){ throw new Error("소리가 공유되지 않았습니다. 공유 창에서 '탭 오디오 공유' 또는 '시스템 오디오 공유'를 켜 주세요."); }
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const src = ctx.createMediaStreamSource(new MediaStream([at]));
+    const an = ctx.createAnalyser(); an.fftSize = 2048; an.smoothingTimeConstant = 0.55; an.minDecibels = -85; an.maxDecibels = -20;
+    src.connect(an);   // 스피커로는 다시 내보내지 않는다 (이미 들리고 있으므로)
+    at.addEventListener("ended", () => this.stopReal());
+    this._an = an; this._ctx = ctx; this._stream = st; this._bins = new Uint8Array(an.frequencyBinCount);
+    this.real = "share"; fire("music-state");
+  },
+  stopReal(){
+    if (this.real === "app") T.core.invoke("music_capture", { on: false }).catch(() => {});
+    try { this._stream?.getTracks().forEach(t => t.stop()); this._ctx?.close(); } catch {}
+    this._an = this._stream = this._ctx = null; this.real = false; fire("music-state");
+  },
+  // 매 프레임 호출 → spec(0..1 × 32), bass, amt(파형 보이는 정도)
+  update(dt, t){
+    const target = new Float32Array(32);
+    let live = false;
+    if (this._an){
+      this._an.getByteFrequencyData(this._bins);
+      const n = this._bins.length, hz = this._ctx.sampleRate / 2 / n;
+      for (let i = 0; i < 32; i++){
+        const f0 = 40 * Math.pow(400, i / 32), f1 = 40 * Math.pow(400, (i + 1) / 32);
+        let a = Math.max(1, Math.floor(f0 / hz)), b = Math.max(a + 1, Math.ceil(f1 / hz)), m = 0;
+        for (let k = a; k < Math.min(b, n); k++) m = Math.max(m, this._bins[k]);
+        target[i] = m / 255;
+      }
+      live = target.some(v => v > 0.05);
+    } else if (this._ext && performance.now() - this._extAt < 400){
+      target.set(this._ext); live = true;
+    } else if (this.playing){
+      // 흉내 파형: 116bpm 박자 + 대역마다 다른 느린 출렁임
+      const beat = (t * 116 / 60) % 1, kick = Math.exp(-beat * 7), off = Math.exp(-((beat + 0.5) % 1) * 9) * 0.5;
+      for (let i = 0; i < 32; i++){
+        const x = i / 31, wob = 0.5 + 0.5 * Math.sin(t * (1.3 + x * 3.1) + i * 1.7 + this._seed) * Math.sin(t * 0.37 + i * 0.6);
+        target[i] = Math.min(1, (0.18 + 0.32 * wob) * (1 - x * 0.45) + kick * (1 - x) * 0.55 + off * x * 0.35);
+      }
+      live = true;
+    }
+    for (let i = 0; i < 32; i++){
+      const up = target[i] > this.spec[i];
+      this.spec[i] += (target[i] - this.spec[i]) * (1 - Math.exp(-(up ? 28 : 7) * dt));
+    }
+    const bassNow = (this.spec[0] + this.spec[1] + this.spec[2] + this.spec[3]) / 4;
+    this.bass += (bassNow - this.bass) * (1 - Math.exp(-(bassNow > this.bass ? 30 : 6) * dt));
+    this.amt += ((live ? 1 : 0) - this.amt) * (1 - Math.exp(-2.5 * dt));
+  },
+};
+on("music-spectrum", (arr) => { if (Array.isArray(arr) && arr.length === 32){ music._ext = Float32Array.from(arr); music._extAt = performance.now(); } });
+
+// ---------- NOW PLAYING 카드 ----------
+const fmtMs = (ms) => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, "0")}`;
+let npShown = null;
+function renderNp(){
+  const n = spotify.current();
+  const card = $("np");
+  if (!spotify.linked || !n){ if (!n) card.hidden = true; return; }
+  card.hidden = false;
+  if (npShown !== n.title + n.artist){
+    npShown = n.title + n.artist;
+    $("npTitle").textContent = n.title; $("npArtist").textContent = n.artist;
+    const img = $("npArt");
+    if (n.art){ img.src = n.art; img.hidden = false; } else img.hidden = true;
+  }
+  $("npDev").textContent = n.device ? "· " + n.device : "";
+  $("npPlay").textContent = n.playing ? "❚❚" : "▶";
+  $("npPlay").setAttribute("aria-label", n.playing ? "일시정지" : "재생");
+  $("npWave").textContent = music.real ? "진짜 파형 ON" : "진짜 파형";
+  $("npWave").classList.toggle("on", !!music.real);
+}
+function tickNp(){
+  const n = spotify.current(); if (!n || $("np").hidden) return;
+  const pos = n.playing ? Math.min(n.duration, n.progress + (Date.now() - n.at)) : n.progress;
+  $("npBar").style.width = (n.duration ? pos / n.duration * 100 : 0) + "%";
+  $("npTime").textContent = `${fmtMs(pos)} / ${fmtMs(n.duration)}`;
+}
+setInterval(tickNp, 500);
+// 원격 기기는 4초마다 상태를 묻는다 (화면이 보일 때만)
+setInterval(() => { if (spotify.linked && !document.hidden && !(spotify.sdkReady && spotify.current()?.device === "J.A.R.V.I.S.")) spotify.refresh(); }, 4000);
+on("music-state", () => { renderNp(); tickNp(); ambient.musicDuck?.(music.playing); });
+const npDo = (a, v) => spotify.control({ action: a, value: v }).catch(e => logLine("err", "", e.message));
+$("npPrev").onclick = () => npDo("previous");
+$("npNext").onclick = () => npDo("next");
+$("npPlay").onclick = () => npDo(spotify.current()?.playing ? "pause" : "resume");
+$("npWave").onclick = () => (music.real ? Promise.resolve(music.stopReal()) : music.startReal()).catch(e => logLine("err", "", e.message));
+$("npClose").onclick = () => { $("np").hidden = true; npShown = null; };
+makeDraggable($("np"), "np", "음악", "header");
+
+spotify.handleRedirect().then(() => { if (spotify.linked){ spotify.loadSdk(); spotify.refresh(); } });
+on("spotify-auth", (v) => { syncSpotifyCfg(); if (v) spotify.loadSdk(); });
+
+// 데스크톱 두뇌가 맡기는 도구 (Spotify 토큰은 화면에 있으므로)
+if (isApp) on("ui-tool", async (req) => {
+  const tool = WEB_TOOLS.find(t => t.name === req?.name);
+  try { const out = await tool.run(req.input || {}); await T.core.invoke("ui_tool_reply", { id: req.id, ok: String(out), error: null }); }
+  catch (e) { await T.core.invoke("ui_tool_reply", { id: req.id, ok: null, error: e?.message || String(e) }).catch(() => {}); }
+});
+
+// ---------- SETTINGS: Spotify ----------
+function syncSpotifyCfg(){
+  $("spRedirect").textContent = spRedirect();
+  $("spState").textContent = spotify.linked ? "연결됨" + (spotify.sdkReady ? " · 브라우저 플레이어 준비" : "") : "연결 안 됨";
+  $("spLink").textContent = spotify.linked ? "연결 해제" : "Spotify 연결";
+}
+$("spLink").onclick = async () => {
+  if (spotify.linked){ spotify.logout(); return; }
+  cfg.spotifyId = $("cfgSpotify").value.trim(); saveCfg();
+  try { $("spLink").disabled = true; await spotify.login(); }
+  catch (e) { $("spState").textContent = e.message; }
+  finally { $("spLink").disabled = false; syncSpotifyCfg(); }
+};
+$("spCopy").onclick = async () => { try { await navigator.clipboard.writeText(spRedirect()); $("spCopy").textContent = "복사됨"; } catch { const r = document.createRange(); r.selectNodeContents($("spRedirect")); getSelection().removeAllRanges(); getSelection().addRange(r); $("spCopy").textContent = "Ctrl+C"; } setTimeout(() => $("spCopy").textContent = "복사", 1500); };
+syncSpotifyCfg();
+
+// ======================================================================
 //  대화
 // ======================================================================
 let busy = false;
@@ -2970,7 +3339,7 @@ try { if (localStorage.getItem("jarvis.hand") === "on") startHand(); } catch {}
 on("mic-level", (v) => { micLevel = Math.max(0, Math.min(1, +v || 0)); });
 on("hologram", (m) => { if (PALETTES[m]) mood = m; });
 on("tool", (p) => logLine("tool", "", "▸ " + (String(p?.name).startsWith("fallback:") ? "바쁜 모델 대신 " + p.name.slice(9) + " 사용" : (TOOL_NAMES[p?.name] || p?.name))));
-const TOOL_NAMES = { get_datetime:"시각 확인", open_app:"프로그램 실행", open_url:"브라우저 열기", set_volume:"볼륨 조절", set_timer:"타이머 설정", set_hologram:"홀로그램 전환", create_file:"파일 만들기", read_file:"첨부 파일 읽기", open_file_picker:"파일 선택 창", show_file:"파일 다시 보기", add_todo:"할 일 추가", list_todos:"할 일 확인", complete_todo:"할 일 완료", remove_todo:"할 일 삭제", show_todos:"할 일 카드", get_weather:"날씨 확인", remember:"기록하기", recall:"기록 찾기", show_memory:"기록 화면", make_panel:"패널 만들기", close_panel:"패널 닫기", arrange_panel:"화면 배치" };
+const TOOL_NAMES = { get_datetime:"시각 확인", open_app:"프로그램 실행", open_url:"브라우저 열기", set_volume:"볼륨 조절", set_timer:"타이머 설정", set_hologram:"홀로그램 전환", create_file:"파일 만들기", read_file:"첨부 파일 읽기", open_file_picker:"파일 선택 창", show_file:"파일 다시 보기", add_todo:"할 일 추가", list_todos:"할 일 확인", complete_todo:"할 일 완료", remove_todo:"할 일 삭제", show_todos:"할 일 카드", get_weather:"날씨 확인", remember:"기록하기", recall:"기록 찾기", show_memory:"기록 화면", make_panel:"패널 만들기", play_music:"음악 틀기", music_control:"음악 제어", now_playing:"지금 나오는 곡", close_panel:"패널 닫기", arrange_panel:"화면 배치" };
 
 const timers = new Map();
 on("timer-set", ({id, label, seconds}) => {
@@ -3354,7 +3723,7 @@ $("testMicBtn").onclick = async () => {
   }
 };
 function openSettings(){
-  $("cfgTts").value = cfg.tts; $("cfgCity").value = cfg.city || ""; $("cfgAmb").value = cfg.ambVol ?? 45;
+  $("cfgTts").value = cfg.tts; $("cfgCity").value = cfg.city || ""; $("cfgSpotify").value = cfg.spotifyId || ""; syncSpotifyCfg(); $("cfgAmb").value = cfg.ambVol ?? 45;
   $("cfgModel").value = cfg.brain; $("cfgGroqKey").value = cfg.groqKey; $("cfgGeminiKey").value = cfg.geminiKey; $("cfgKey").value = cfg.apiKey; $("cfgWhisper").value = cfg.whisper;
   syncKeyFields(); panel.hidden = false; $("diagOut").hidden = true;
   if (!isApp) ({ groq: $("cfgGroqKey"), gemini: $("cfgGeminiKey"), claude: $("cfgKey") })[BRAINS[cfg.brain].provider].focus();
@@ -3370,7 +3739,7 @@ $("cfgForm").addEventListener("submit", (e) => {
   cfg.brain = $("cfgModel").value; cfg.groqKey = $("cfgGroqKey").value.trim(); cfg.geminiKey = $("cfgGeminiKey").value.trim(); cfg.apiKey = $("cfgKey").value.trim();
   cfg.whisper = $("cfgWhisper").value;
   const cityChanged = (cfg.city || "") !== $("cfgCity").value.trim();
-  cfg.city = $("cfgCity").value.trim(); cfg.ambVol = +$("cfgAmb").value;
+  cfg.city = $("cfgCity").value.trim(); cfg.ambVol = +$("cfgAmb").value; cfg.spotifyId = $("cfgSpotify").value.trim();
   if (cityChanged){ cfg.cityGeo = null; refreshWxStatus(); if (isApp) T.core.invoke("set_city", { city: cfg.city }).catch(() => {}); }
   const ttsChanged = cfg.tts !== $("cfgTts").value;
   cfg.tts = $("cfgTts").value;
@@ -3413,6 +3782,8 @@ uniform vec3 uColA, uColB, uColC;
 uniform vec2 uLook;   // 마우스/손 방향 (-1..1)
 uniform vec4 uPassA[3];   // 지나가는 위성: 시작 xy, 끝 xy (uv 좌표)
 uniform vec3 uPassB[3];   // 진행률 0..1, 밝기, 번쩍임 세기
+uniform float uSpec[32];  // 음악 스펙트럼 (저음→고음)
+uniform float uMusic, uBass;
 
 float hash(vec2 p){ p = fract(p*vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x*p.y); }
 float noise(vec2 p){
@@ -3491,6 +3862,27 @@ void main(){
   float halo = exp(-max(r - 1., 0.)*3.)*(.22 + .45*uEnergy + .35*uLevel);
   col += uColA*halo*.32*smoothstep(.98, 1.02, r);
 
+  // 음악 파형: 구체 둘레를 감싸는 원형 스펙트럼. 아래가 저음, 위가 고음, 좌우 대칭.
+  // 선 두 겹(바깥 밝은 선 + 안쪽 반사선)과 구체까지 이어지는 옅은 빛 기둥, 저음에 맞춰 부푸는 헤일로
+  if (uMusic > .003){
+    float th = atan(p.x, -p.y);                       // 아래=0, 위=±π
+    float u = clamp(abs(th)/3.14159, 0., 1.);
+    float fi = u*31.;
+    int i0 = int(floor(fi)); int i1 = min(i0 + 1, 31);
+    float v = mix(uSpec[i0], uSpec[i1], smoothstep(0., 1., fract(fi)));
+    float R = 1.10 + .06*uBass + v*.46;
+    float d = r - R;
+    float aa = fwidth(r)*1.5 + .003;
+    float line = exp(-pow(d/(.006 + aa), 2.));
+    float glow = exp(-abs(d)*20.)*.35;
+    float fill = step(1.015, r)*step(r, R)*(.05 + .22*v)*smoothstep(1.015, R, r);
+    float spoke = exp(-pow((fract(fi + .5) - .5)/.06, 2.))*step(1.015, r)*step(r, R)*.35*v;
+    float inner = exp(-pow((r - (1.06 + v*.12))/.004, 2.))*.35;
+    vec3 mc = mix(mix(uColA, vec3(1.), .15), uColC, smoothstep(.1, .9, u));
+    col += mc*(line*(.7 + .8*v) + glow*v + fill + spoke + inner*v)*uMusic;
+    col += uColA*exp(-max(r - 1., 0.)*2.2)*uBass*.28*uMusic*smoothstep(.98, 1.02, r);
+  }
+
   // 홀로그램 구체
   if (r < 1.){
     float z = sqrt(1. - r*r);
@@ -3510,7 +3902,7 @@ void main(){
     float fres = pow(1. - z, 2.1);
     float rim = smoothstep(.9, 1., r)*(1. - smoothstep(.985, 1., r));
     vec3 holo = uColA*(fres*1.15 + grid*(.08 + .38*fres)*(.55 + .8*uEnergy) + scan*.22 + rim*.5);
-    float pulse = .5 + .5*uSpeak + .9*uLevel;
+    float pulse = .5 + .5*uSpeak + .9*uLevel + 1.1*uBass*uMusic;
     holo += mix(uColA, vec3(1.), .55)*exp(-r*r*6.5)*.5*pulse;
     holo += uColC*.07*sin(lon*5. + t*1.1 + lat*4.)*fres;
     col = col*(.42 + .45*r) + holo;
@@ -3673,7 +4065,8 @@ const updCap = () => { const r = capEl.getBoundingClientRect(); captionTop = cap
 new ResizeObserver(updCap).observe(capEl); addEventListener("resize", updCap); new MutationObserver(updCap).observe(capEl, { childList: true, subtree: true });
 let last = performance.now(), clock = 0;
 function frame(now){
-  const dt = Math.min(.05, (now - last)/1000); last = now;
+  // rAF 시각이 이전 값보다 이르게 오는 경우가 있어 음수 dt를 막는다 (음수면 감쇠가 폭주한다)
+  const dt = Math.max(0, Math.min(.05, (now - last)/1000)); last = Math.max(last, now);
   clock += dt*(reduce ? .25 : 1)*(1 + S.energy*.35);
 
   const targetEnergy = { idle:.22, listening:.62 + micLevel*.4, thinking:.95, speaking:.7 }[mode];
@@ -3720,6 +4113,8 @@ function frame(now){
   gl.uniform1f(su.uSpeak, S.speak); gl.uniform1f(su.uRadius, S.radius);
   gl.uniform3fv(su.uColA, S.A); gl.uniform3fv(su.uColB, S.B); gl.uniform3fv(su.uColC, S.C);
   gl.uniform2f(su.uLook, look.x, look.y);
+  music.update(dt, clock);
+  if (su["uSpec[0]"]){ gl.uniform1fv(su["uSpec[0]"], music.spec); gl.uniform1f(su.uMusic, music.amt); gl.uniform1f(su.uBass, music.bass); }
   updatePassers(now);
   if (su["uPassA[0]"]){ gl.uniform4fv(su["uPassA[0]"], passA); gl.uniform3fv(su["uPassB[0]"], passB); }
   gl.drawArrays(gl.TRIANGLES, 0, 3);
@@ -3728,7 +4123,7 @@ function frame(now){
   gl.useProgram(parts.p); gl.bindVertexArray(pVao);
   const pu = parts.u;
   gl.uniform2f(pu.uRes, W, H); gl.uniform2f(pu.uCenter, cx, cy);
-  gl.uniform1f(pu.uTime, clock); gl.uniform1f(pu.uEnergy, S.energy + S.stir); gl.uniform1f(pu.uLevel, S.level);
+  gl.uniform1f(pu.uTime, clock); gl.uniform1f(pu.uEnergy, S.energy + S.stir); gl.uniform1f(pu.uLevel, Math.max(S.level, music.bass * music.amt * .8));
   gl.uniform1f(pu.uRadius, S.radius); gl.uniform1f(pu.uDpr, dpr);
   gl.uniform3fv(pu.uColA, S.A); gl.uniform3fv(pu.uColC, S.C);
   gl.uniform2f(pu.uLook, look.x, look.y);
