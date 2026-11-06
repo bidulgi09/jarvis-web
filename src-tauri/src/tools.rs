@@ -155,6 +155,16 @@ pub fn schemas(tb: &Toolbox) -> Value {
             "input_schema": { "type": "object", "properties": { "query": { "type": "string" } } }
         },
         {
+            "name": "open_file_picker",
+            "description": "파일 선택 창을 연다. 사용자가 파일·사진·문서를 올리겠다, 첨부하겠다고 하면 호출한다.",
+            "input_schema": { "type": "object", "properties": {} }
+        },
+        {
+            "name": "show_file",
+            "description": "예전에 첨부한 파일을 화면에 다시 띄운다. name은 파일 이름 일부나 종류(PDF, 사진, 워드)여도 된다. 비우면 가장 최근 파일.",
+            "input_schema": { "type": "object", "properties": { "name": { "type": "string" } } }
+        },
+        {
             "name": "show_memory",
             "description": "기록 네트워크 화면을 열거나 닫는다.",
             "input_schema": {
@@ -283,6 +293,18 @@ pub async fn run(app: &AppHandle, tb: &Toolbox, name: &str, input: &Value) -> Re
                 return Ok("관련 기록 없음".into());
             }
             Ok(serde_json::to_string(&found)?)
+        }
+
+        // 파일 선택 창과 파일 뷰어는 화면(웹뷰) 쪽에서 처리한다
+        "open_file_picker" => {
+            let _ = app.emit("file-picker", ());
+            Ok("화면에 파일 선택 창을 띄우도록 했음 (안 열리면 화면의 '파일 고르기' 버튼을 눌러 달라고 안내)".into())
+        }
+
+        "show_file" => {
+            let name = input["name"].as_str().unwrap_or_default();
+            let _ = app.emit("show-file", name);
+            Ok(format!("화면에 '{name}' 파일을 띄우도록 했음"))
         }
 
         "show_memory" => {
