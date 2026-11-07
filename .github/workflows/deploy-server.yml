@@ -1,0 +1,43 @@
+name: 서버 배포 (Cloudflare Workers)
+
+# 필요한 저장소 Secrets (Settings → Secrets and variables → Actions):
+#   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, GROQ_API_KEY, JARVIS_PASSPHRASE, TOKEN_SECRET
+# push 때마다 자동 배포하려면 Variables에 DEPLOY_SERVER = true 를 추가한다. (없으면 수동 실행만)
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["server/**", "ui/shared/**", "scripts/gen-shared.mjs", ".github/workflows/deploy-server.yml"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-server
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || vars.DEPLOY_SERVER == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/gen-shared.mjs
+      - name: 배포 전 테스트
+        run: node --test server/test/*.test.mjs
+      - uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: server
+          secrets: |
+            GROQ_API_KEY
+            JARVIS_PASSPHRASE
+            TOKEN_SECRET
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          JARVIS_PASSPHRASE: ${{ secrets.JARVIS_PASSPHRASE }}
+          TOKEN_SECRET: ${{ secrets.TOKEN_SECRET }}

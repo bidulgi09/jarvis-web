@@ -1,0 +1,18 @@
+# Cloudflare Workers 설정 · 배포: npx wrangler deploy (server 폴더에서)
+name = "jarvis-api"
+main = "src/worker.js"
+compatibility_date = "2026-10-01"
+
+[build]
+command = "node ../scripts/gen-shared.mjs"
+
+[vars]
+# 이 서버를 쓸 수 있는 웹 주소 (GitHub Pages 주소). 쉼표로 여러 개.
+ALLOWED_ORIGINS = "https://bidulgi09.github.io"
+MODEL = "openai/gpt-oss-120b"
+MODEL_SMALL = "openai/gpt-oss-20b"
+TZ = "Asia/Seoul"
+# 비밀 값은 여기 적지 말고 아래 명령으로 넣는다:
+#   npx wrangler secret put GROQ_API_KEY
+#   npx wrangler secret put JARVIS_PASSPHRASE
+#   npx wrangler secret put TOKEN_SECRET

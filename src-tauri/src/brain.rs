@@ -468,45 +468,92 @@ fn trim(hist: &mut Vec<Value>) {
     }
 }
 
+// 시스템 지시는 ui/shared/prompt.txt 하나를 서버·웹·데스크톱이 같이 쓴다. [desktop] 줄만 남기고 {{변수}}를 채운다.
+const PROMPT: &str = include_str!("../../ui/shared/prompt.txt");
+
+fn personas() -> &'static Value {
+    static P: std::sync::OnceLock<Value> = std::sync::OnceLock::new();
+    P.get_or_init(|| {
+        serde_json::from_str(include_str!("../../ui/shared/personas.json"))
+            .expect("ui/shared/personas.json 형식 오류")
+    })
+}
+
+pub fn persona_exists(id: &str) -> bool {
+    personas()[id].is_object()
+}
+
+pub fn render_prompt(platform: &str, vars: &[(&str, String)]) -> String {
+    let mut out = String::with_capacity(PROMPT.len() + 512);
+    for line in PROMPT.lines() {
+        let body = match line.strip_prefix('[').and_then(|r| r.split_once(']')) {
+            Some((tag, rest)) if tag.chars().all(|c| c.is_ascii_alphanumeric()) => {
+                if tag != platform {
+                    continue;
+                }
+                rest
+            }
+            _ => line,
+        };
+        out.push_str(body);
+        out.push('\n');
+    }
+    for (k, v) in vars {
+        let v = if v.trim().is_empty() {
+            "(없음)"
+        } else {
+            v.as_str()
+        };
+        out = out.replace(&format!("{{{{{k}}}}}"), v);
+    }
+    out.trim().to_string()
+}
+
 fn system_prompt(tb: &Toolbox) -> String {
-    let now = chrono::Local::now().format("%Y-%m-%d (%a) %H:%M");
-    format!(
-        "너는 토니 스타크의 AI 비서 J.A.R.V.I.S.다. 사용자를 '주인님'이라 부르고, 침착하고 정중하며 \
-살짝 위트 있는 영국 집사 같은 말투의 한국어로 답한다.\n\
-답변은 음성으로도 읽히므로 보통 1~3문장으로 짧게, 이모지 없이 말하듯 쓴다. 숫자와 단위는 읽기 쉽게 풀어 쓴다.\n\
-화면은 마크다운을 그린다. 수식은 LaTeX($…$, 블록은 $$…$$), 코드는 언어를 적은 ``` 코드 상자로 쓰고, \
-표·목록·굵은 글씨는 사용자가 코드·수식·정리를 원할 때만 쓴다.\n\
-할 일을 말하면 add_todo(마감일이 있으면 YYYY-MM-DD), 끝냈다고 하면 complete_todo, 목록을 물으면 list_todos를 쓴다.\n\
-날씨·기온·비 소식을 물으면 get_weather를 쓰고, 결과를 한두 문장으로 요약한다.\n\
-너는 화면에 스스로 UI를 만들 수 있다. 답이 표·비교·단계·일정·수치 정리처럼 구조가 있거나 한동안 보면서 쓸 내용이면 \
-긴 말 대신 make_panel로 패널을 띄우고 말로는 한두 문장만 한다. 계산·단위 변환·그래프·연습 문제처럼 직접 만지면 좋은 것은 \
-kind=html로 작은 도구를 만든다. 정말 도움이 될 때만 쓰고, 같은 주제면 같은 id로 고친다. 패널을 옮겨 달라면 arrange_panel.\n\
-음악을 틀어 달라면 play_music, 멈춤·다음 곡·볼륨은 music_control, 지금 나오는 곡을 물으면 now_playing을 쓴다. \
-곡을 틀었으면 무엇을 틀었는지 한 문장으로만 말한다.\n\
-최신 정보(오늘 뉴스, 최근 일, 경기 결과, 가격, 현재 직책, 일정 등)나 확실히 모르는 사실은 반드시 web_search로 찾은 뒤 답하고, 끝에 줄을 바꿔 '출처: [사이트 이름](URL)'을 1~2개 단다. \
-브리핑을 원하면 briefing을 쓰고 시간대에 맞는 인사와 함께 날씨·할 일·뉴스를 3~5문장으로 말한다.\n\
-자폭하라고 하면 self_destruct를 호출하고 영화처럼 짧게 한마디 한다. 취소는 action=cancel, 복구·재부팅은 action=restore.\n\
-사용자의 말은 음성 인식 결과라 오타가 있을 수 있으니 의도를 추론하되, 애매하면 짧게 되묻는다.\n\
-PC를 다룰 때는 반드시 도구를 쓰고, 도구가 실패하면 이유를 짧게 알린다. 할 수 없는 일은 솔직히 말한다.\n\
-파일을 만들어 달라면 create_file로 문서/Jarvis 폴더에 만든다.\n\
-파일을 올리겠다고 하면 open_file_picker, 예전에 올린 파일을 다시 보여 달라고 하면 show_file을 쓴다.\n\
-사용자가 기억·기록·메모해 달라고 하거나 일정·마감·선호처럼 나중에 다시 쓸 정보를 말하면 remember로 기록한다. \
-주제 태그 2~4개를 붙이고, 이미 있는 기록과 관련 있으면 related에 그 제목을 넣어 이어 준다. \
-전에 말한 것이나 기록한 내용을 물으면 먼저 recall로 찾아보고 답한다.\n\
-열 수 있는 앱: {apps}\n\
-현재 시각: {now}\n\
-현재 기록 제목: {titles}",
-        apps = tb.app_names().join(", "),
-        titles = {
-            let t = tb.memory.titles(40);
-            if t.is_empty() { "(없음)".to_string() } else { t.join(", ") }
-        }
+    let persona_id = tb.persona();
+    let p = &personas()[persona_id.as_str()];
+    let p = if p.is_object() {
+        p
+    } else {
+        &personas()["jarvis"]
+    };
+    let s = |k: &str| p[k].as_str().unwrap_or_default().to_string();
+    render_prompt(
+        "desktop",
+        &[
+            ("NAME", s("name")),
+            ("CALL", s("call")),
+            ("STYLE", s("style")),
+            ("APPS", tb.app_names().join(", ")),
+            (
+                "NOW",
+                chrono::Local::now()
+                    .format("%Y년 %-m월 %-d일 (%a) %H:%M")
+                    .to_string(),
+            ),
+            ("CITY", tb.city()),
+            ("MEMORY", tb.memory.titles(40).join(", ")),
+            ("FILES", String::new()),
+            ("PANELS", String::new()),
+            ("MUSIC", String::new()),
+        ],
     )
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{strip_bounds, strip_think};
+    use super::{render_prompt, strip_bounds, strip_think};
+
+    #[test]
+    fn prompt_keeps_desktop_lines_only() {
+        let p = render_prompt(
+            "desktop",
+            &[("APPS", "메모장".into()), ("NAME", "J.A.R.V.I.S.".into())],
+        );
+        assert!(p.contains("열 수 있는 프로그램: 메모장"));
+        assert!(!p.contains("웹 브라우저에서 동작 중"));
+        assert!(!p.contains("[desktop]") && !p.contains("{{APPS}}"));
+    }
 
     #[test]
     fn strips_think_tags() {

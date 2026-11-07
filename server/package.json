@@ -1,0 +1,12 @@
+{
+  "name": "jarvis-server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "gen": "node ../scripts/gen-shared.mjs",
+    "dev": "node dev.mjs",
+    "test": "node --test test/*.test.mjs",
+    "deploy": "npx wrangler@4 deploy"
+  },
+  "engines": { "node": ">=20" }
+}

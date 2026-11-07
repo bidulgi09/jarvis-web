@@ -20,12 +20,15 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://sdk.scdn.co 'wasm-unsafe-eval' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob: https://i.scdn.co https://*.scdn.co https://*.spotifycdn.com; media-src 'self' data: blob:; connect-src 'self' blob: data: https://*.workers.dev http://127.0.0.1:8787 http://localhost:8787 https://api.groq.com https://generativelanguage.googleapis.com https://api.anthropic.com https://geocoding-api.open-meteo.com https://api.open-meteo.com https://ko.wikipedia.org https://accounts.spotify.com https://api.spotify.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://huggingface.co https://*.huggingface.co https://*.hf.co https://storage.googleapis.com ipc: http://ipc.localhost; frame-src 'self' blob: https://sdk.scdn.co https://*.spotify.com; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'"
     }
   },
   "bundle": {
     "active": true,
     "targets": "all",
-    "icon": ["icons/icon.png", "icons/icon.ico"]
+    "icon": [
+      "icons/icon.png",
+      "icons/icon.ico"
+    ]
   }
 }

@@ -1,0 +1,45 @@
+name: 검사 (서버 테스트 · 데스크톱 빌드 확인)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  server-and-web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: 공용 파일 생성물이 최신인지
+        run: node scripts/gen-shared.mjs --check
+      - name: 서버 보안·동작 테스트
+        run: node --test server/test/*.test.mjs
+      - name: 화면 스크립트 문법 확인
+        run: node --check ui/app.js && node --check server/dist/worker.bundle.js
+      - name: 비밀 값이 저장소에 들어가지 않았는지
+        run: |
+          if git grep -nE '(gsk_[A-Za-z0-9]{20,}|AIza[0-9A-Za-z_-]{30,}|sk-ant-[A-Za-z0-9_-]{20,})' -- ':!*.md'; then
+            echo "::error::API 키처럼 보이는 문자열이 있습니다"; exit 1
+          fi
+
+  desktop:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - name: cargo check
+        working-directory: src-tauri
+        run: cargo check
+      - name: cargo test
+        working-directory: src-tauri
+        run: cargo test

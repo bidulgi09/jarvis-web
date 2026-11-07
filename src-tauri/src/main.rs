@@ -9,7 +9,9 @@ mod search;
 mod stt;
 mod todo;
 mod tools;
+mod vision;
 mod weather;
+mod webread;
 
 use serde::Serialize;
 use std::path::{Path, PathBuf};
@@ -183,6 +185,24 @@ fn todo_clear_done(app: AppHandle, state: State<'_, AppState>) -> Result<(), Str
     Ok(())
 }
 
+/// 말투 바꾸기 (화면의 set_persona 도구가 알려 준다)
+#[tauri::command]
+fn set_persona(state: State<'_, AppState>, id: String) -> Result<(), String> {
+    state
+        .brain
+        .toolbox()
+        .set_persona(&id)
+        .map_err(|e| format!("{e:#}"))
+}
+
+/// 첨부 이미지·카메라 사진을 Groq 비전 모델로 설명 (키는 .env의 GROQ_API_KEY)
+#[tauri::command]
+async fn describe_image(data_url: String, question: String) -> Result<String, String> {
+    vision::describe(&data_url, &question)
+        .await
+        .map_err(|e| format!("{e:#}"))
+}
+
 #[tauri::command]
 fn set_city(state: State<'_, AppState>, city: String) -> Result<(), String> {
     state
@@ -297,6 +317,8 @@ fn main() {
             todo_remove,
             todo_clear_done,
             set_city,
+            set_persona,
+            describe_image,
             spotify_auth,
             ui_tool_reply,
             transcribe_clip,

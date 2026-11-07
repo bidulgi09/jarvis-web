@@ -3,3 +3,6 @@
 .env
 /models/*.bin
 .DS_Store
+/server/.dev.vars
+/server/.wrangler/
+/server/node_modules/

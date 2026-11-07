@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<!-- 자비스가 만든 html 패널이 도는 곳. 부모 화면과 다른 출처(sandbox)이고, 외부 통신은 막는다. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; form-action 'none'; base-uri 'none'">
+<meta name="referrer" content="no-referrer">
+</head>
+<body>
+<script>
+(function () {
+  var done = false;
+  addEventListener("message", function (e) {
+    if (done || e.source !== parent || !e.data || typeof e.data.jarvisPanelHtml !== "string") return;
+    done = true;
+    document.open(); document.write(e.data.jarvisPanelHtml); document.close();
+  });
+  parent.postMessage({ jarvisPanelReady: 1 }, "*");
+})();
+</script>
+</body>
+</html>
