@@ -47,7 +47,7 @@ fn pending() -> &'static std::sync::Mutex<HashMap<u64, Reply>> {
     P.get_or_init(Default::default)
 }
 
-/// 화면에 도구 실행을 맡기고 결과를 기다린다 (최대 25초)
+/// 화면에 도구 실행을 맡기고 결과를 기다린다 (보통 25초, 파이썬 엔진을 처음 받는 코드 실행은 90초)
 async fn ask_ui(app: &AppHandle, name: &str, input: &Value) -> Result<String> {
     static NEXT: AtomicU64 = AtomicU64::new(1);
     let id = NEXT.fetch_add(1, Ordering::Relaxed);
@@ -57,7 +57,8 @@ async fn ask_ui(app: &AppHandle, name: &str, input: &Value) -> Result<String> {
         .map_err(|_| anyhow::anyhow!("잠금 실패"))?
         .insert(id, tx);
     let _ = app.emit("ui-tool", json!({ "id": id, "name": name, "input": input }));
-    let out = tokio::time::timeout(Duration::from_secs(25), rx).await;
+    let wait = if name == "run_code" { 90 } else { 25 };
+    let out = tokio::time::timeout(Duration::from_secs(wait), rx).await;
     if let Ok(mut p) = pending().lock() {
         p.remove(&id);
     }

@@ -236,6 +236,9 @@ const TOOL_IMPLS = [
   { name: "look_camera", run: (i) => lookCamera(i) },
   { name: "set_persona", run: (i) => setPersona(i) },
   { name: "party_mode", run: (i) => partyMode(i) },
+  { name: "hack_mode", run: (i) => hackMode(i) },
+  { name: "run_code", run: (i) => runCode(i) },
+  { name: "ui_control", run: (i) => uiControl(i) },
   { name: "show_planet", run: (i) => showPlanet(i) },
   { name: "get_datetime", run: () => new Date().toLocaleString("ko-KR", { dateStyle: "full", timeStyle: "short" }) },
   { name: "set_timer", run: (i) => {
@@ -2112,11 +2115,16 @@ function makeDraggable(el, key, name, handle = null){
     }
     const r = el.getBoundingClientRect();
     const st = { x: e.clientX, y: e.clientY, dx: e.clientX - r.left, dy: e.clientY - r.top, id: e.pointerId, moved: false };
+    // 끄는 동안 글자가 선택되지 않게: 잡는 순간부터 놓을 때까지 화면 전체의 선택을 막는다
+    const root = document.documentElement;
+    root.classList.add("noSelect");
+    if (e.pointerType === "mouse" && !e.target.closest("pre, code, .md, p, li, td")) e.preventDefault();
     const move = (ev) => {
       if (ev.pointerId !== st.id) return;
       if (!st.moved){
         if (Math.hypot(ev.clientX - st.x, ev.clientY - st.y) < 5) return;
         st.moved = true; floatEl(el, r.width); el.classList.add("dragging"); toFront(el);
+        try { getSelection()?.removeAllRanges(); } catch {}
       }
       ev.preventDefault();
       placeFloat(el, ev.clientX - st.dx, ev.clientY - st.dy);
@@ -2124,6 +2132,7 @@ function makeDraggable(el, key, name, handle = null){
     const up = (ev) => {
       if (ev.pointerId !== st.id) return;
       removeEventListener("pointermove", move); removeEventListener("pointerup", up); removeEventListener("pointercancel", up);
+      root.classList.remove("noSelect");
       if (!st.moved) return;
       el.classList.remove("dragging"); lastDragEnd = performance.now();
       rememberPos(key, el);
@@ -3416,6 +3425,13 @@ async function pttUp(src){
   if (!text){ setMode("idle"); $("heard").textContent = "잘 듣지 못했어요. 다시 말해 주세요."; return; }
   ask(text);
 }
+// 듣기를 조용히 취소한다 (손으로 구체를 잡으려다 '펼친 손'이 먼저 잡혀 듣기가 시작된 경우)
+async function pttCancel(src){
+  if (!holding || (src && holdSource && src !== holdSource)) return;
+  holding = false; holdSource = null; $("mic").setAttribute("aria-pressed","false");
+  setMode("idle"); $("heard").textContent = "";
+  try{ await api.stopListening(); } catch {}
+}
 const mic = $("mic");
 mic.addEventListener("pointerdown", (e) => { e.preventDefault(); mic.setPointerCapture?.(e.pointerId); pttDown("pointer"); });
 mic.addEventListener("pointerup", () => pttUp("pointer"));
@@ -3503,7 +3519,7 @@ async function startHand(){
 }
 function stopHand(){
   hand.on = false; hand.stream?.getTracks().forEach(t => t.stop()); hand.stream = null;
-  camVideo.srcObject = null; $("cam").hidden = true; handLook = null; hand.lm = null;
+  camVideo.srcObject = null; $("cam").hidden = true; handLook = null; hand.lm = null; grabHand(null, 0);
   hand.raw = hand.stable = "none";
   if (holdSource === "hand") pttUp("hand");
   if (!$("stHand").classList.contains("bad")) $("stHand").textContent = "꺼짐";
@@ -3548,9 +3564,12 @@ function handTick(now){
   }
 
   // 같은 모양이 holdMs 동안 유지되어야 확정 (손 떨림·전환 중 오작동 방지)
+  grabHand(lm, now);
+  const grabQuiet = grab.held || now < grab.suppressUntil;   // 잡고 던지는 동안은 제스처 음성 입력을 쉰다
   if (hand.raw !== hand.stable && now - hand.rawSince >= GESTURE.holdMs){
     hand.stable = hand.raw;
-    if (hand.stable === GESTURE.start && !holding && !busy) pttDown("hand");
+    if (grabQuiet) {}
+    else if (hand.stable === GESTURE.start && !holding && !busy) pttDown("hand");
     else if (hand.stable === GESTURE.stop && holdSource === "hand") pttUp("hand");
   }
   const gl = $("gesture");
@@ -3578,6 +3597,499 @@ function drawCam(lm){
   camCtx.restore();
 }
 let holoRGB = [0.47, 0.95, 1.0];   // 렌더러가 매 프레임 현재 홀로그램 색으로 갱신
+// ======================================================================
+//  포스 그랩: 홀로그램 구체를 잡아 끌고 던진다.
+//   마우스·손가락: 구체를 누른 채 끌고, 놓으면 던진 속도 그대로 날아가 화면 벽에 튕기다 제자리로.
+//   손 인식: 구체 근처에서 주먹을 쥐거나 엄지·검지로 집으면 잡힘, 손을 펴면 던짐.
+//   잡고 있는 동안·놓은 직후에는 손 제스처 음성 입력이 끼어들지 않는다.
+// ======================================================================
+const grab = { held: false, by: "", ox: 0, oy: 0, vx: 0, vy: 0, tx: 0, ty: 0, sx: 0, sy: 0, sox: 0, soy: 0, hist: [], suppressUntil: 0, glow: 0, lastBump: 0, tipShown: false };
+const GRAB_BLOCK = "button, input, textarea, select, a, label, .dragbox, .card, .sat, .gen, .sheet, .mem, .hist, .hack, .snap, .fv, #fv, .layoutBar, .sd";
+function grabSound(kind, power = 1){
+  const ac = sdAudio(); if (!ac) return; ac.resume?.();
+  const t = ac.currentTime, g = ac.createGain();
+  g.connect(ac.destination);
+  if (kind === "grab"){
+    const o = ac.createOscillator(); o.type = "sawtooth"; o.frequency.setValueAtTime(70, t); o.frequency.exponentialRampToValueAtTime(140, t + 0.25);
+    const lp = ac.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.setValueAtTime(300, t); lp.frequency.exponentialRampToValueAtTime(1400, t + 0.2);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.14, t + 0.05); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.45);
+    o.connect(lp); lp.connect(g); o.start(t); o.stop(t + 0.5);
+  } else {
+    const len = kind === "throw" ? 0.5 : 0.18, n = ac.createBuffer(1, ac.sampleRate * len, ac.sampleRate), d = n.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, kind === "throw" ? 1.5 : 4);
+    const s = ac.createBufferSource(); s.buffer = n;
+    const f = ac.createBiquadFilter(); f.type = kind === "throw" ? "bandpass" : "lowpass";
+    if (kind === "throw"){ f.frequency.setValueAtTime(400, t); f.frequency.exponentialRampToValueAtTime(2500, t + 0.35); f.Q.value = 0.9; }
+    else f.frequency.value = 260;
+    g.gain.setValueAtTime(Math.min(0.5, 0.12 + power * 0.3), t);
+    s.connect(f); f.connect(g); s.start(t);
+    if (kind === "bump"){ const o = ac.createOscillator(), og = ac.createGain(); o.frequency.setValueAtTime(90, t); o.frequency.exponentialRampToValueAtTime(40, t + 0.15); og.gain.setValueAtTime(Math.min(0.5, 0.2 + power * 0.3), t); og.gain.exponentialRampToValueAtTime(0.0001, t + 0.2); o.connect(og); og.connect(ac.destination); o.start(t); o.stop(t + 0.22); }
+  }
+}
+function grabStart(by, x, y){
+  if (grab.held || sd.phase === "count" || sd.phase === "boom") return false;
+  Object.assign(grab, { held: true, by, sx: x, sy: y, sox: grab.ox, soy: grab.oy, tx: grab.ox, ty: grab.oy, hist: [[performance.now(), x, y]] });
+  document.body.classList.add("grabbing");
+  grabSound("grab");
+  if (!grab.tipShown){ grab.tipShown = true; $("heard").textContent = by === "hand" ? "잡았습니다 · 손을 펴면 던집니다" : "잡았습니다 · 놓으면 던집니다"; }
+  return true;
+}
+function grabMove(x, y){
+  if (!grab.held) return;
+  grab.tx = grab.sox + (x - grab.sx); grab.ty = grab.soy + (y - grab.sy);
+  const now = performance.now();
+  grab.hist.push([now, x, y]);
+  while (grab.hist.length > 2 && now - grab.hist[0][0] > 110) grab.hist.shift();
+}
+function grabEnd(){
+  if (!grab.held) return;
+  const h = grab.hist, a = h[0], b = h[h.length - 1], dt = Math.max(16, b[0] - a[0]) / 1000;
+  let vx = (b[1] - a[1]) / dt, vy = (b[2] - a[2]) / dt;
+  if (performance.now() - b[0] > 120){ vx = 0; vy = 0; }          // 멈췄다가 놓으면 그냥 내려놓기
+  const sp = Math.hypot(vx, vy), max = 4200;
+  if (sp > max){ vx *= max / sp; vy *= max / sp; }
+  grab.vx = vx; grab.vy = vy; grab.held = false; grab.by = "";
+  grab.suppressUntil = performance.now() + 1600;
+  document.body.classList.remove("grabbing");
+  if (sp > 500) grabSound("throw", Math.min(1, sp / 3000));
+  if ($("heard").textContent.startsWith("잡았습니다")) $("heard").textContent = "";
+}
+// 마우스·터치
+addEventListener("pointerdown", (e) => {
+  if (e.button !== 0 || !e.isPrimary || e.target.closest?.(GRAB_BLOCK)) return;
+  if (Math.hypot(e.clientX - orbGeom.x, e.clientY - orbGeom.y) > orbGeom.r * 1.08) return;
+  if (!grabStart("pointer", e.clientX, e.clientY)) return;
+  e.preventDefault();
+  const id = e.pointerId;
+  const mv = (ev) => { if (ev.pointerId === id){ ev.preventDefault(); grabMove(ev.clientX, ev.clientY); } };
+  const up = (ev) => { if (ev.pointerId !== id) return; removeEventListener("pointermove", mv); removeEventListener("pointerup", up); removeEventListener("pointercancel", up); grabEnd(); };
+  addEventListener("pointermove", mv, { passive: false }); addEventListener("pointerup", up); addEventListener("pointercancel", up);
+}, true);
+// 마우스가 구체 위에 있으면 손 모양 커서
+addEventListener("pointermove", (e) => {
+  if (grab.held || e.pointerType !== "mouse") return;
+  const over = !e.target.closest?.(GRAB_BLOCK) && Math.hypot(e.clientX - orbGeom.x, e.clientY - orbGeom.y) < orbGeom.r * 1.08;
+  document.body.classList.toggle("canGrab", over);
+}, { passive: true });
+// 손 인식: handTick에서 매번 부른다. 손바닥 중심의 화면 위치, 쥔 모양인지
+function grabHand(lm, now){
+  const cur = $("handCursor");
+  if (!lm){ cur.hidden = true; if (grab.held && grab.by === "hand") grabEnd(); return; }
+  const c = lm[9], x = (1 - c.x) * innerWidth, y = c.y * innerHeight;
+  const d = (a, b) => Math.hypot(lm[a].x - lm[b].x, lm[a].y - lm[b].y);
+  const palm = d(0, 9) || 1e-3;
+  const pinch = d(4, 8) < palm * 0.32;
+  const closed = hand.raw === "fist" || pinch;
+  cur.hidden = false;
+  cur.style.transform = `translate(${x}px, ${y}px)`;
+  cur.classList.toggle("closed", closed);
+  const near = Math.hypot(x - orbGeom.x, y - orbGeom.y) < orbGeom.r * 2.2;
+  cur.classList.toggle("near", near && !grab.held);
+  if (!grab.held){
+    hand.closedSince = closed ? (hand.closedSince || now) : 0;
+    if (closed && near && now - hand.closedSince > 110 && holdSource !== "hand"){
+      // 펼친 손을 보이다가 바로 쥐었으면, 그 사이 시작된 음성 입력은 조용히 취소한다
+      if (holding && holdSource === "hand") pttCancel("hand");
+      grabStart("hand", x, y);
+    }
+  } else if (grab.by === "hand"){
+    grabMove(x, y);
+    hand.openSince = !closed ? (hand.openSince || now) : 0;
+    if (!closed && now - hand.openSince > 70) grabEnd();
+  }
+}
+// 매 프레임 물리: 잡혀 있으면 손을 빠르게 따라가고, 놓으면 스프링처럼 출렁이며 제자리로. 화면 벽에서 튕긴다.
+function grabPhysics(dt){
+  if (grab.held){
+    const k = 1 - Math.exp(-24 * dt);
+    const nx = grab.ox + (grab.tx - grab.ox) * k, ny = grab.oy + (grab.ty - grab.oy) * k;
+    grab.vx = (nx - grab.ox) / Math.max(dt, 1e-3); grab.vy = (ny - grab.oy) / Math.max(dt, 1e-3);
+    grab.ox = nx; grab.oy = ny;
+  } else if (grab.ox || grab.oy || grab.vx || grab.vy){
+    const K = 10, C = 1.7;
+    grab.vx += (-K * grab.ox - C * grab.vx) * dt; grab.vy += (-K * grab.oy - C * grab.vy) * dt;
+    grab.ox += grab.vx * dt; grab.oy += grab.vy * dt;
+    const r = orbGeom.r, bx = orbGeom.x - grab.ox, by = orbGeom.y - grab.oy;   // 오프셋 없는 원래 자리
+    const walls = [[bx + grab.ox - r, "vx", 1, () => (grab.ox = r - bx)], [innerWidth - (bx + grab.ox) - r, "vx", -1, () => (grab.ox = innerWidth - r - bx)],
+                   [by + grab.oy - r, "vy", 1, () => (grab.oy = r - by)], [innerHeight - (by + grab.oy) - r, "vy", -1, () => (grab.oy = innerHeight - r - by)]];
+    for (const [gap, axis, sign, clamp] of walls){
+      if (gap < 0 && grab[axis] * sign < 0){
+        const sp = Math.abs(grab[axis]);
+        grab[axis] = -grab[axis] * 0.72; clamp();
+        if (sp > 260 && performance.now() - grab.lastBump > 90){ grab.lastBump = performance.now(); grabSound("bump", Math.min(1, sp / 2500)); document.body.classList.remove("bump"); void document.body.offsetWidth; document.body.classList.add("bump"); }
+      }
+    }
+    if (Math.abs(grab.ox) < 0.4 && Math.abs(grab.oy) < 0.4 && Math.hypot(grab.vx, grab.vy) < 6){ grab.ox = grab.oy = grab.vx = grab.vy = 0; }
+  }
+  const speed = Math.hypot(grab.vx, grab.vy);
+  grab.glow += ((grab.held ? 1 : Math.min(1, speed / 1600)) - grab.glow) * (1 - Math.exp(-8 * dt));
+}
+
+// ======================================================================
+//  해킹 모드 (순수 연출 · 실제로는 어디에도 접속하지 않는다)
+//   매트릭스 비, 터미널 네 개(침투 콘솔·포트 스캔·메모리 덤프·암호 해독), 방화벽 진행 막대,
+//   한 번 '접근 거부'로 막혔다가 우회 → 암호 글자가 하나씩 맞춰지며 ACCESS GRANTED.
+//   대상 이름은 가상의 것만 쓰고, IP는 문서용 예시 대역(203.0.113.x)만 쓴다.
+// ======================================================================
+const hack = { on: false, timers: [], raf: 0, ac: null };
+const HACK_PAL = [[0.35, 1.0, 0.55], [0.02, 0.22, 0.08], [0.7, 1.0, 0.4]];
+function hackSound(kind){
+  const ac = sdAudio(); if (!ac) return;
+  const t = ac.currentTime, g = ac.createGain(); g.connect(ac.destination);
+  if (kind === "key"){
+    const n = ac.createBuffer(1, 600, ac.sampleRate), d = n.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 6);
+    const s = ac.createBufferSource(); s.buffer = n; const f = ac.createBiquadFilter(); f.type = "highpass"; f.frequency.value = 2200 + Math.random() * 1500;
+    g.gain.value = 0.05; s.connect(f); f.connect(g); s.start(t); return;
+  }
+  const tone = (f, dur, type = "square", vol = 0.05, at = 0) => { const o = ac.createOscillator(), og = ac.createGain(); o.type = type; o.frequency.value = f; og.gain.setValueAtTime(vol, t + at); og.gain.exponentialRampToValueAtTime(0.0001, t + at + dur); o.connect(og); og.connect(ac.destination); o.start(t + at); o.stop(t + at + dur + 0.02); };
+  if (kind === "blip") tone(1400 + Math.random() * 1200, 0.05, "square", 0.025);
+  if (kind === "ok") { tone(880, 0.08, "square", 0.04); tone(1320, 0.1, "square", 0.04, 0.08); }
+  if (kind === "deny") { for (let i = 0; i < 3; i++) tone(180, 0.18, "sawtooth", 0.12, i * 0.22); }
+  if (kind === "grant") { [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => tone(f, 0.6, "triangle", 0.09, i * 0.07)); }
+}
+function hackRain(cv){
+  const ctx = cv.getContext("2d"), glyphs = "アイウエオカキクケコサシスセソタチツテトナニヌネノ0123456789ABCDEF<>{}[]#$%&*+=".split("");
+  let cols = [], size = 16, last = 0;
+  const fit = () => { cv.width = innerWidth * Math.min(devicePixelRatio, 2); cv.height = innerHeight * Math.min(devicePixelRatio, 2); size = 15 * Math.min(devicePixelRatio, 2); cols = Array.from({ length: Math.ceil(cv.width / size) }, () => Math.random() * -cv.height / size); };
+  fit(); addEventListener("resize", fit);
+  const step = (now) => {
+    if (!hack.on){ removeEventListener("resize", fit); return; }
+    hack.raf = requestAnimationFrame(step);
+    if (now - last < 45) return; last = now;
+    ctx.fillStyle = "rgba(0, 8, 2, 0.16)"; ctx.fillRect(0, 0, cv.width, cv.height);
+    ctx.font = `${size}px "JetBrains Mono", monospace`;
+    for (let i = 0; i < cols.length; i++){
+      const y = cols[i] * size;
+      ctx.fillStyle = Math.random() < 0.06 ? "#eaffef" : `rgba(60, 255, 120, ${0.35 + Math.random() * 0.5})`;
+      ctx.fillText(glyphs[(Math.random() * glyphs.length) | 0], i * size, y);
+      cols[i] = y > cv.height && Math.random() > 0.975 ? 0 : cols[i] + 1;
+    }
+  };
+  hack.raf = requestAnimationFrame(step);
+}
+function hackMode({ target } = {}){
+  if (hack.on) return "이미 해킹 연출 중";
+  if (sd.phase !== "idle" && sd.phase) return "지금은 자폭 연출 중이라 할 수 없음";
+  const T = String(target || "STARK-MAINFRAME").toUpperCase().replace(/[^0-9A-Z가-힣 _-]/g, "").trim().replace(/\s+/g, "-").slice(0, 24) || "STARK-MAINFRAME";
+  const ip = `203.0.113.${10 + Math.floor(Math.random() * 230)}`;
+  const el = $("hack");
+  hack.on = true; el.hidden = false; document.body.classList.add("hacking");
+  requestAnimationFrame(() => el.classList.add("open"));
+  hackRain($("hackRain"));
+  const at = (ms, fn) => hack.timers.push(setTimeout(() => hack.on && fn(), ms));
+  const term = (id) => $(id).querySelector("pre");
+  const push = (id, text, cls) => {
+    const pre = term(id), line = document.createElement("div");
+    if (cls) line.className = cls;
+    line.textContent = text; pre.append(line);
+    while (pre.childNodes.length > 60) pre.firstChild.remove();
+    pre.scrollTop = pre.scrollHeight;
+    return line;
+  };
+  const type = (id, text, cls, speed = 26) => new Promise((ok) => {
+    const line = push(id, "", cls); let i = 0;
+    const tick = () => { if (!hack.on) return ok(); line.textContent = text.slice(0, ++i); if (i % 2) hackSound("key"); if (i < text.length) hack.timers.push(setTimeout(tick, speed * (0.6 + Math.random()))); else ok(); };
+    tick();
+  });
+  for (const id of ["hkA", "hkB", "hkC", "hkD"]) term(id).textContent = "";
+  $("hkTarget").textContent = T; $("hkIp").textContent = ip;
+  $("hkBar").style.width = "0%"; $("hkPct").textContent = "0%"; $("hkLayer").textContent = "방화벽 0/5";
+  const res = $("hkResult"); res.className = "hkResult"; res.textContent = ""; $("hkNote").hidden = true;
+  const slots = $("hkPass"); slots.textContent = "";
+  const PASS = "J4RV1S-0WNS";
+  const slotEls = [...PASS].map(() => { const s = document.createElement("span"); s.textContent = "•"; slots.append(s); return s; });
+  const setProgress = (p, layer) => { $("hkBar").style.width = p + "%"; $("hkPct").textContent = Math.round(p) + "%"; if (layer != null) $("hkLayer").textContent = `방화벽 ${layer}/5`; };
+
+  // 1) 침투 콘솔
+  (async () => {
+    await type("hkA", `ops@jarvis:~$ ssh -J relay-07,relay-12 ops@${ip}`, "cmd");
+    push("hkA", `Warning: Permanently added '${ip}' (ED25519) to the list of known hosts.`, "dim");
+    await type("hkA", `ops@jarvis:~$ ./breach --target ${T} --mode stealth --layers 5`, "cmd");
+    push("hkA", "[*] 프록시 체인: 서울 → 레이캬비크 → 케이프타운 → 시드니 → 서울", "");
+  })();
+  // 2) 포트 스캔
+  const ports = [["22", "open", "ssh"], ["80", "filtered", "http"], ["443", "open", "https"], ["1337", "open", "arc-reactor-telemetry"], ["3000", "closed", "dev"], ["5900", "filtered", "vnc"], ["8443", "open", "jarvis-sync"], ["31337", "open", "suit-uplink"]];
+  at(500, () => push("hkB", `SCAN ${ip}  (가상 대상 ${T})`, "hi"));
+  at(700, () => push("hkB", "PORT      STATE     SERVICE", "dim"));
+  ports.forEach((p, i) => at(900 + i * 260, () => { push("hkB", `${(p[0] + "/tcp").padEnd(10)}${p[1].padEnd(10)}${p[2]}`, p[1] === "open" ? "ok" : "dim"); hackSound("blip"); }));
+  // 3) 메모리 덤프 (계속 흐름)
+  const hex = () => Array.from({ length: 8 }, () => ((Math.random() * 65536) | 0).toString(16).padStart(4, "0")).join(" ");
+  let addr = 0x7ff3a000 + ((Math.random() * 0xfff) | 0) * 16;
+  const dump = () => { if (!hack.on) return; push("hkC", `${(addr += 16).toString(16)}  ${hex()}  ${Array.from({ length: 8 }, () => String.fromCharCode(33 + Math.random() * 90)).join("")}`, Math.random() < 0.08 ? "hi" : "dim"); hack.timers.push(setTimeout(dump, 70 + Math.random() * 60)); };
+  at(400, dump);
+  // 4) 암호 해독 슬롯: 계속 바뀌다가 하나씩 고정
+  const CH = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#$%&";
+  let locked = 0;
+  const spin = () => { if (!hack.on) return; slotEls.forEach((s, i) => { if (i >= locked) s.textContent = CH[(Math.random() * CH.length) | 0]; }); hack.timers.push(setTimeout(spin, 55)); };
+  at(600, () => { push("hkD", "$ decrypt --keyspace 2^256 --gpu quantum-sim", "cmd"); spin(); });
+  // 방화벽 단계
+  const layers = [[2600, 18, 1, "[+] 방화벽 1/5 우회 · 핸드셰이크 위장"], [3800, 34, 2, "[+] 방화벽 2/5 우회 · 세션 토큰 재조립"], [5000, 51, 3, "[!] 침입 탐지 시스템 반응 → 패턴 변형"], [5600, 58, 3, "[+] 방화벽 3/5 우회"]];
+  layers.forEach(([ms, p, l, msg]) => at(ms, () => { setProgress(p, l); push("hkA", msg, msg.startsWith("[!]") ? "warn" : "ok"); hackSound(msg.startsWith("[!]") ? "blip" : "ok"); }));
+  // 한 번 막힌다
+  at(6900, () => { setProgress(66, 4); push("hkA", "[x] 방화벽 4/5 — 역추적 시도 감지. 연결 끊김", "bad"); res.textContent = "ACCESS DENIED"; res.className = "hkResult denied show"; el.classList.add("alarm"); hackSound("deny"); });
+  at(8300, () => { res.className = "hkResult"; el.classList.remove("alarm"); push("hkA", "[*] 우회 경로 재구성 · 미끼 트래픽 20,000개 살포", ""); });
+  at(9100, () => { push("hkA", "[+] 방화벽 4/5 우회", "ok"); setProgress(80, 4); hackSound("ok"); });
+  at(9900, () => { push("hkA", "[+] 방화벽 5/5 우회 · 관리자 셸 획득", "ok"); setProgress(92, 5); hackSound("ok"); });
+  // 암호 글자 고정
+  [...PASS].forEach((ch, i) => at(9200 + i * 190, () => { locked = i + 1; slotEls[i].textContent = ch; slotEls[i].classList.add("lock"); hackSound("blip"); if (i === PASS.length - 1) push("hkD", `[+] KEY FOUND: ${PASS}`, "ok"); }));
+  at(11600, () => { setProgress(100, 5); res.textContent = "ACCESS GRANTED"; res.className = "hkResult granted show"; hackSound("grant"); push("hkA", `[✓] ${T} 접속 완료. 환영합니다, ${personaOf(cfg.persona).call || "주인님"}.`, "hi"); });
+  at(13800, () => { $("hkNote").hidden = false; });
+  at(18500, () => hackStop());
+  return `해킹 연출 시작 (가상 대상 ${T}, 문서용 예시 IP, 실제 접속 없음). 약 15초 동안 화면에서 진행되고 중간에 한 번 막혔다가 뚫린다. 영화 속 해커처럼 짧게 한마디만 하고, 끝에 연출이라고 덧붙일 것`;
+}
+function hackStop(){
+  if (!hack.on) return;
+  hack.on = false;
+  hack.timers.forEach(clearTimeout); hack.timers = [];
+  cancelAnimationFrame(hack.raf);
+  const el = $("hack"); el.classList.remove("open", "alarm"); document.body.classList.remove("hacking");
+  setTimeout(() => { if (!hack.on) el.hidden = true; }, 500);
+}
+$("hackClose").onclick = hackStop;
+addEventListener("keydown", (e) => { if (e.key === "Escape" && hack.on) hackStop(); });
+
+
+// ======================================================================
+//  코드 실행 (run_code): 자바스크립트·파이썬을 격리된 워커에서 돌린다.
+//   · 워커 안에서는 네트워크(fetch·XHR·WebSocket·importScripts)와 저장소를 지운 뒤 실행한다.
+//   · 화면(DOM)·키·대화 기록에는 손이 닿지 않는다. 시간이 넘으면 워커째 끊는다.
+//   · 파이썬은 Pyodide(WebAssembly)를 처음 한 번 내려받는다(약 10MB). numpy 등은 import하면 자동으로 받는다.
+// ======================================================================
+const CODE = { jsMs: 5000, pyMs: 15000, pyLoadMs: 60000, maxOut: 6000, pyodide: "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/" };
+const LOCKDOWN = `
+  for (const k of ["fetch","XMLHttpRequest","WebSocket","EventSource","indexedDB","caches","BroadcastChannel","Worker","SharedWorker"]) { try { Object.defineProperty(self, k, { value: undefined, configurable: false }); } catch {} }
+`;
+const JS_WORKER = `
+"use strict";
+const out = [];
+const rep = (k, x) => typeof x === "bigint" ? x + "n" : x;
+const fmt = (v) => { if (typeof v === "string") return v; try { const c = JSON.stringify(v, rep); if (c === undefined) return String(v); return c.length <= 100 ? c : JSON.stringify(v, rep, 2); } catch { return String(v); } };
+const push = (kind) => (...a) => { out.push((kind ? kind + " " : "") + a.map(fmt).join(" ")); };
+self.console = { log: push(""), info: push(""), debug: push(""), warn: push("⚠"), error: push("✖"), table: push("") };
+self.onmessage = async (e) => {
+  const code = e.data.code;
+  ${LOCKDOWN}
+  try { importScripts = undefined; } catch {}
+  const AsyncFn = Object.getPrototypeOf(async function(){}).constructor;
+  let fn;
+  try { fn = new AsyncFn("return (" + code + "\\n)"); } catch { fn = null; }
+  try {
+    if (!fn) fn = new AsyncFn(code);
+    const v = await fn();
+    postMessage({ ok: true, out, value: v === undefined ? null : fmt(v) });
+  } catch (err) {
+    postMessage({ ok: false, out, error: (err && err.name ? err.name + ": " : "") + (err && err.message || String(err)) });
+  }
+};`;
+const PY_WORKER = (base) => `
+let py = null;
+const out = [];
+const NET = ["fetch","XMLHttpRequest","WebSocket","EventSource"], saved = {};
+const netOff = () => { for (const k of NET) { if (!(k in saved)) saved[k] = self[k]; self[k] = undefined; } };
+const netOn = () => { for (const k of NET) if (k in saved) self[k] = saved[k]; };
+self.onmessage = async (e) => {
+  if (e.data.load) {
+    try {
+      importScripts("${base}pyodide.js");
+      py = await loadPyodide({ indexURL: "${base}", stdout: (s) => out.push(s), stderr: (s) => out.push("✖ " + s) });
+      postMessage({ ready: true });
+    } catch (err) { postMessage({ ready: false, error: String(err && err.message || err) }); }
+    return;
+  }
+  out.length = 0;
+  const code = e.data.code;
+  try {
+    netOn(); await py.loadPackagesFromImports(code); netOff();   // 패키지 받을 때만 잠깐 네트워크를 열고, 사용자 코드가 도는 동안은 닫는다
+    const r = await py.runPythonAsync(code);
+    let value = null;
+    if (r !== undefined && r !== null) { try { value = String(r.toString ? r.toString() : r); } catch { value = String(r); } r.destroy?.(); }
+    postMessage({ ok: true, out: out.slice(), value });
+  } catch (err) {
+    const msg = String(err && err.message || err).trim().split("\\n");
+    postMessage({ ok: false, out: out.slice(), error: msg.slice(-6).join("\\n") });
+  }
+};`;
+const blobWorker = (src) => { const u = URL.createObjectURL(new Blob([src], { type: "text/javascript" })); const w = new Worker(u); setTimeout(() => URL.revokeObjectURL(u), 5000); return w; };
+const pyState = { w: null, ready: null };
+function pyWorker(onStatus){
+  if (pyState.ready) return pyState.ready;
+  onStatus?.("파이썬 엔진 내려받는 중… (처음 한 번, 10MB 정도)");
+  const w = blobWorker(PY_WORKER(CODE.pyodide));
+  pyState.w = w;
+  pyState.ready = new Promise((ok, bad) => {
+    const t = setTimeout(() => { w.terminate(); pyState.w = pyState.ready = null; bad(new Error("파이썬 엔진을 불러오지 못했습니다(시간 초과)")); }, CODE.pyLoadMs);
+    w.onmessage = (e) => { clearTimeout(t); if (e.data.ready) ok(w); else { w.terminate(); pyState.w = pyState.ready = null; bad(new Error("파이썬 엔진을 불러오지 못했습니다: " + e.data.error)); } };
+    w.onerror = (e) => { clearTimeout(t); w.terminate(); pyState.w = pyState.ready = null; bad(new Error("파이썬 엔진 오류: " + (e.message || "알 수 없음"))); };
+    w.postMessage({ load: true });
+  });
+  return pyState.ready;
+}
+function execIn(w, code, ms, onKill){
+  return new Promise((ok) => {
+    const t = setTimeout(() => { w.terminate(); onKill?.(); ok({ ok: false, out: [], error: `시간 초과 (${ms / 1000}초) — 무한 반복이 있는지 확인하세요` }); }, ms);
+    w.onmessage = (e) => { clearTimeout(t); ok(e.data); };
+    w.onerror = (e) => { clearTimeout(t); e.preventDefault?.(); ok({ ok: false, out: [], error: e.message || "실행 오류" }); };
+    w.postMessage({ code });
+  });
+}
+const clip = (s, n = CODE.maxOut) => (s.length > n ? s.slice(0, n) + `\n… (${s.length - n}자 생략)` : s);
+async function runCode({ language, code } = {}){
+  const lang = /^py/i.test(String(language || "")) ? "python" : "javascript";
+  code = String(code || "").replace(/^```[a-z]*\n?|```\s*$/gi, "");
+  if (!code.trim()) throw new Error("실행할 코드가 없습니다");
+  if (code.length > 20000) throw new Error("코드가 너무 깁니다 (2만 자 이하)");
+  const card = codeCard(lang, code);
+  const t0 = performance.now();
+  let r;
+  try {
+    if (lang === "python"){
+      const w = await pyWorker((s) => card.status(s));
+      card.status("실행 중…");
+      r = await execIn(w, code, CODE.pyMs, () => { pyState.w = pyState.ready = null; });
+    } else {
+      card.status("실행 중…");
+      const w = blobWorker(JS_WORKER);
+      r = await execIn(w, code, CODE.jsMs);
+      w.terminate();
+    }
+  } catch (e) { r = { ok: false, out: [], error: String(e.message || e) }; }
+  const ms = Math.round(performance.now() - t0);
+  const stdout = clip((r.out || []).join("\n"));
+  card.done(r.ok, stdout, r.ok ? r.value : r.error, ms);
+  const parts = [`언어: ${lang}`, `결과: ${r.ok ? "성공" : "오류"} (${ms}ms)`];
+  if (stdout) parts.push("출력:\n" + stdout);
+  if (r.ok && r.value != null) parts.push("마지막 값: " + clip(String(r.value), 2000));
+  if (!r.ok) parts.push("오류: " + r.error);
+  parts.push("화면의 코드 창에 코드와 결과가 보이고 있다. 결과를 짧게 말로 정리하고, 오류면 원인을 짚어 고친 코드를 다시 실행해 볼 것");
+  return parts.join("\n");
+}
+function codeCard(lang, code){
+  const el = $("codeRun");
+  el.hidden = false; toFront?.(el);
+  $("crLang").textContent = lang === "python" ? "PYTHON" : "JAVASCRIPT";
+  const pre = $("crCode"); pre.textContent = code; pre.className = "language-" + lang;
+  try { window.hljs?.highlightElement(pre); } catch {}
+  const out = $("crOut"), st = $("crStatus");
+  out.textContent = ""; out.className = "crOut"; st.textContent = "";
+  return {
+    status: (s) => { st.textContent = s; },
+    done: (ok, stdout, val, ms) => {
+      st.textContent = `${ok ? "완료" : "오류"} · ${ms}ms`;
+      st.className = "crStatus " + (ok ? "ok" : "bad");
+      out.textContent = [stdout, val != null && val !== "" ? (ok ? "⇒ " : "") + val : ""].filter(Boolean).join("\n") || "(출력 없음)";
+      out.className = "crOut " + (ok ? "" : "bad");
+    },
+  };
+}
+$("crClose").onclick = () => { $("codeRun").hidden = true; };
+$("crCopy").onclick = async () => { try { await navigator.clipboard.writeText($("crCode").textContent); $("crCopy").textContent = "복사됨"; setTimeout(() => ($("crCopy").textContent = "복사"), 1200); } catch {} };
+$("crRerun").onclick = () => { const c = $("crCode").textContent, l = /PYTHON/.test($("crLang").textContent) ? "python" : "javascript"; runCode({ language: l, code: c }).catch(() => {}); };
+
+makeDraggable($("codeRun"), "coderun", "코드 실행", "header");
+
+// ======================================================================
+//  화면 조종 (ui_control): 자비스가 화면의 모든 창·카드·패널을 직접 다룬다.
+//   list로 지금 무엇이 열려 있는지 보고, open/close/toggle/minimize/expand/front/move/resize/scroll.
+//   위치(9칸 배치)·원래 자리·배치 모드는 arrange_panel이 맡는다.
+// ======================================================================
+const vis = (el) => !!el && !el.hidden && !el.closest("[hidden]") && el.getClientRects().length > 0;   // 떠 있는(fixed) 창은 offsetParent가 없어서 이렇게 본다
+const UI_TARGETS = [
+  { key: "wx", name: "날씨", words: ["날씨", "weather"], el: () => $("wx"),
+    open: async () => { if (!$("wxDays").childElementCount) await getWeather(); $("wx").hidden = false; }, close: () => { $("wx").hidden = true; } },
+  { key: "todo", name: "할 일", words: ["할 일", "할일", "todo", "투두"], el: () => $("todo"), open: () => setTodoOpen(true), close: () => setTodoOpen(false) },
+  { key: "np", name: "음악", words: ["음악", "노래", "스포티파이", "music", "spotify", "재생"], el: () => $("np"),
+    open: () => { if (!spotify.current?.()) throw new Error("지금 재생 중인 음악이 없어 음악 카드를 열 수 없음"); $("np").hidden = false; }, close: () => { $("np").hidden = true; } },
+  { key: "cam", name: "카메라·손 인식", words: ["카메라", "손", "camera", "hand", "제스처"], el: () => $("cam"), isOpen: () => hand.on, open: () => startHand(), close: () => stopHand() },
+  { key: "log", name: "대화 기록", words: ["대화 기록", "로그", "log", "기록창"], el: () => $("log"), open: () => { $("log").hidden = false; }, close: () => { $("log").hidden = true; } },
+  { key: "hist", name: "지난 대화(히스토리)", words: ["히스토리", "history", "지난 대화", "이전 대화"], el: () => $("hist"), open: () => openHistory(), close: () => closeHistory() },
+  { key: "settings", name: "설정", words: ["설정", "settings", "환경설정"], el: () => panel, open: () => openSettings(), close: () => closeSettings() },
+  { key: "coderun", name: "코드 실행 창", words: ["코드", "code", "실행 창", "run"], el: () => $("codeRun"),
+    open: () => { if (!$("crCode").textContent) throw new Error("아직 실행한 코드가 없음"); $("codeRun").hidden = false; }, close: () => { $("codeRun").hidden = true; } },
+  { key: "hack", name: "해킹 연출", words: ["해킹", "hack"], el: () => $("hack"), open: () => hackMode({}), close: () => hackStop() },
+  { key: "timers", name: "타이머", words: ["타이머", "timer"], el: () => $("timers"), fixed: true },
+  { key: "status", name: "상태판", words: ["상태판", "상태", "status"], el: () => $("status"), fixed: true },
+  { key: "caption", name: "자막", words: ["자막", "답변", "caption"], el: () => document.querySelector(".caption"), fixed: true },
+  { key: "bar", name: "입력창", words: ["입력창", "입력", "input"], el: () => $("form"), fixed: true },
+  { key: "brand", name: "로고", words: ["로고", "logo"], el: () => document.querySelector(".brand"), fixed: true },
+  { key: "hint", name: "버튼 줄", words: ["버튼 줄", "버튼", "buttons"], el: () => document.querySelector(".hint"), fixed: true },
+];
+function uiTargets(){
+  // 자비스가 만든 패널도 대상에 넣는다
+  const gens = [...document.querySelectorAll(".gen")].map((el) => ({
+    key: el.dataset.dragKey, name: el.querySelector("header .pt")?.textContent.trim().slice(0, 40) || el.dataset.dragKey, gen: true,
+    words: [el.dataset.dragKey], el: () => el, open: () => { el.hidden = false; el.classList.remove("min"); }, close: () => closePanel(el.dataset.dragKey),
+  }));
+  return [...UI_TARGETS, ...gens];
+}
+function findTarget(q){
+  q = String(q || "").trim().toLowerCase(); if (!q) return null;
+  const all = uiTargets();
+  return all.find((t) => t.key.toLowerCase() === q || t.name.toLowerCase() === q)
+      || all.find((t) => t.gen && (t.name.toLowerCase().includes(q) || q.includes(t.name.toLowerCase())))
+      || all.find((t) => t.words.some((w) => q.includes(w.toLowerCase())))
+      || all.find((t) => t.name.toLowerCase().includes(q));
+}
+const isOpenT = (t) => (t.isOpen ? t.isOpen() : vis(t.el()));
+function uiList(){
+  const rows = uiTargets().map((t) => {
+    const el = t.el(), open = isOpenT(t);
+    const r = open && el ? el.getBoundingClientRect() : null;
+    const where = r ? ` @(${Math.round(r.left / innerWidth * 100)}%, ${Math.round(r.top / innerHeight * 100)}%) ${Math.round(r.width)}×${Math.round(r.height)}` : "";
+    return `- ${t.name} [${t.key}]${t.gen ? " (만든 패널)" : ""}: ${open ? "열림" : "닫힘"}${el?.classList.contains("min") ? " · 접힘" : ""}${where}${t.fixed ? " · 늘 있음" : ""}`;
+  });
+  return `화면 ${innerWidth}×${innerHeight}${document.body.classList.contains("layoutEdit") ? " · 배치 모드 켜짐" : ""}\n` + rows.join("\n");
+}
+async function uiControl({ action = "list", target, x, y, width, direction } = {}){
+  action = String(action || "list").toLowerCase();
+  if (action === "list") return uiList();
+  if (action === "close_all"){
+    const shut = [];
+    for (const t of uiTargets()) if (!t.fixed && t.close && isOpenT(t) && t.key !== "cam"){ try { await t.close(); shut.push(t.name); } catch {} }
+    return shut.length ? "닫음: " + shut.join(", ") : "닫을 창이 없었음";
+  }
+  const t = findTarget(target);
+  if (!t) throw new Error(`'${target ?? ""}'에 해당하는 창을 찾지 못함. 있는 것: ${uiTargets().map((u) => u.name).join(", ")}`);
+  const el = t.el();
+  const need = (cond, msg) => { if (!cond) throw new Error(msg); };
+  switch (action){
+    case "open": case "show":
+      need(t.open, `${t.name}은(는) 늘 화면에 있음`); await t.open(); if (el) toFront(el); return `${t.name} 열었음`;
+    case "close": case "hide":
+      need(t.close, `${t.name}은(는) 닫을 수 없음 (화면 기본 요소)`); await t.close(); return `${t.name} 닫았음`;
+    case "toggle":
+      need(t.open && t.close, `${t.name}은(는) 열고 닫는 창이 아님`);
+      if (isOpenT(t)){ await t.close(); return `${t.name} 닫았음`; } await t.open(); return `${t.name} 열었음`;
+    case "minimize": case "expand": {
+      need(el && el.querySelector("header"), `${t.name}은(는) 접을 수 있는 창이 아님`);
+      el.classList.toggle("min", action === "minimize"); return `${t.name} ${action === "minimize" ? "접었음" : "펼쳤음"}`;
+    }
+    case "front":
+      need(el && draggables.has(t.key), `${t.name}은(는) 앞으로 가져올 수 없음`); toFront(el); return `${t.name}을(를) 맨 앞으로`;
+    case "move": case "resize": {
+      need(el && draggables.has(t.key), `${t.name}은(는) 옮길 수 없음`);
+      if (!isOpenT(t) && t.open) await t.open();
+      const r = el.getBoundingClientRect();
+      const w = action === "resize" || width != null ? Math.max(180, Math.min(innerWidth - 12, Number(width) || r.width)) : r.width;
+      floatEl(el, w);
+      const px = x != null ? Math.max(0, Math.min(100, Number(x))) / 100 * (innerWidth - w) : r.left;
+      const py = y != null ? Math.max(0, Math.min(100, Number(y))) / 100 * (vpH() - Math.min(r.height, vpH() * .8)) : r.top;
+      placeFloat(el, px, py); rememberPos(t.key, el); toFront(el); updCapSoon();
+      return `${t.name}: ${action === "resize" ? `너비 ${Math.round(w)}px` : `위치 (${Math.round(px / innerWidth * 100)}%, ${Math.round(py / innerHeight * 100)}%)`}`;
+    }
+    case "scroll": {
+      need(el, `${t.name}은(는) 스크롤할 수 없음`);
+      const box = [el, ...el.querySelectorAll("*")].find((n) => n.scrollHeight > n.clientHeight + 4 && /(auto|scroll)/.test(getComputedStyle(n).overflowY));
+      need(box, `${t.name}에는 스크롤할 내용이 없음`);
+      const d = String(direction || "down");
+      box.scrollTo({ top: d === "top" ? 0 : d === "bottom" ? box.scrollHeight : box.scrollTop + (d === "up" ? -1 : 1) * box.clientHeight * .8, behavior: "smooth" });
+      return `${t.name} ${d} 스크롤`;
+    }
+  }
+  throw new Error("action은 list, open, close, toggle, close_all, minimize, expand, front, move, resize, scroll 중 하나");
+}
+
+
 (function handLoop(now){ handTick(now || 0); requestAnimationFrame(handLoop); })();
 try { if (localStorage.getItem("jarvis.hand") === "on") startHand(); } catch {}
 
@@ -4075,6 +4587,7 @@ uniform float uHole;      // 블랙홀 0..1
 uniform float uOrb;       // 홀로그램 구체·고리 보이는 정도 0..1
 uniform int uPlanet;      // 행성 모드: 0 없음, 1 지구, 2 달, 3 화성, 4 목성, 5 토성, 6 태양, 7 금성, 8 해왕성
 uniform float uPlanetMix; // 홀로그램 → 행성 전환 정도 0..1
+uniform float uGrab;      // 포스 그랩 역장 세기 0..1
 
 float hash(vec2 p){ p = fract(p*vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x*p.y); }
 float noise(vec2 p){
@@ -4230,6 +4743,15 @@ void main(){
   // 외곽 헤일로
   float halo = exp(-max(r - 1., 0.)*3.)*(.22 + .45*uEnergy + .35*uLevel);
   col += uColA*halo*.32*smoothstep(.98, 1.02, r)*uOrb;
+  // 포스 그랩: 구체를 감싸는 역장 고리와 지직거리는 전기
+  if (uGrab > .01){
+    float ang = atan(p.y, p.x);
+    float crack = noise(vec2(ang*7. + uTime*3., uTime*11.));
+    float wob = 1.13 + .03*sin(ang*9. + uTime*14.)*crack;
+    float ring = exp(-pow((r - wob)*18., 2.));
+    float arcs = smoothstep(.72, .95, noise(vec2(ang*16., uTime*20.)))*exp(-max(r - 1.02, 0.)*9.)*step(1., r);
+    col += mix(vec3(.55, .85, 1.), uColA, .35)*(ring*(.45 + .9*crack) + arcs*.9)*uGrab*uOrb;
+  }
 
   // 음악 파형: 구체 둘레를 감싸는 원형 스펙트럼. 아래가 저음, 위가 고음, 좌우 대칭.
   // 선 두 겹(바깥 밝은 선 + 안쪽 반사선)과 구체까지 이어지는 옅은 빛 기둥, 저음에 맞춰 부푸는 헤일로
@@ -4526,7 +5048,8 @@ function frame(now){
   speakKick = Math.max(speakKick, Math.min(1, ttsLevel() * 5));   // Supertonic 재생 음량에 맞춰 코어가 맥동
   const speakTarget = mode === "speaking" ? .45 + .55*Math.max(speakKick, .5 + .5*Math.sin(clock*8.5)) : 0;
   S.speak = ease(S.speak, speakTarget, 9, dt);
-  const pal = party.on ? party.palette(clock) : PALETTES[mood];
+  const pal = hack.on ? HACK_PAL : party.on ? party.palette(clock) : PALETTES[mood];
+  grabPhysics(dt);
   const pr = party.on ? 5 : 1;
   for (let k = 0; k < 3; k++){ S.A[k] = ease(S.A[k], pal[0][k], 1.4*pr, dt); S.B[k] = ease(S.B[k], pal[1][k], 1.1*pr, dt); S.C[k] = ease(S.C[k], pal[2][k], 1.2*pr, dt); }
   if (party.on){ const kick = party.kick(clock); S.energy = Math.max(S.energy, .55 + .45*kick); document.documentElement.style.setProperty("--beat", kick.toFixed(3)); }
@@ -4554,7 +5077,7 @@ function frame(now){
   const baseTop = vh * (narrow ? .40 : .44);
   const fitTop = Math.max(rPx + 70, Math.min(baseTop, captionTop - rPx - 40));
   S.orbTop = ease(S.orbTop ?? baseTop, fitTop, 2.6, dt);
-  const cx = W*.5 + look.x*W*.045, cy = H - S.orbTop*dpr + look.y*H*.05;
+  const cx = W*.5 + look.x*W*.045 + grab.ox*dpr, cy = H - S.orbTop*dpr + look.y*H*.05 - grab.oy*dpr;   // 포스 그랩 오프셋 (화면 y는 아래로, GL y는 위로)
   const rootStyle = document.documentElement.style;
   rootStyle.setProperty("--orb-px", Math.round(rPx) + "px");
   rootStyle.setProperty("--state-y", Math.round(S.orbTop - look.y*vh*.05 + rPx + 18) + "px");
@@ -4568,6 +5091,7 @@ function frame(now){
   gl.uniform1f(su.uSpeak, S.speak); gl.uniform1f(su.uRadius, S.radius);
   gl.uniform3fv(su.uColA, S.A); gl.uniform3fv(su.uColB, S.B); gl.uniform3fv(su.uColC, S.C);
   gl.uniform2f(su.uLook, look.x, look.y);
+  if (su.uGrab) gl.uniform1f(su.uGrab, grab.glow);
   S.orb = ease(S.orb ?? 1, sd.orbT, sd.orbT < S.orb ? 9 : 1.6, dt);
   S.hole = ease(S.hole ?? 0, sd.holeT, sd.holeT > S.hole ? .45 : 1.5, dt);
   S.scatter = ease(S.scatter ?? 0, sd.scatterT, sd.scatterT > S.scatter ? 2.2 : .9, dt);
@@ -4584,7 +5108,7 @@ function frame(now){
   gl.useProgram(parts.p); gl.bindVertexArray(pVao);
   const pu = parts.u;
   gl.uniform2f(pu.uRes, W, H); gl.uniform2f(pu.uCenter, cx, cy);
-  gl.uniform1f(pu.uTime, clock); gl.uniform1f(pu.uEnergy, S.energy + S.stir); gl.uniform1f(pu.uLevel, Math.max(S.level, music.bass * music.amt * .8));
+  gl.uniform1f(pu.uTime, clock); gl.uniform1f(pu.uEnergy, S.energy + S.stir); gl.uniform1f(pu.uLevel, Math.max(S.level, music.bass * music.amt * .8, grab.glow * .55));
   gl.uniform1f(pu.uRadius, S.radius); gl.uniform1f(pu.uDpr, dpr);
   gl.uniform3fv(pu.uColA, S.A); gl.uniform3fv(pu.uColC, S.C);
   gl.uniform2f(pu.uLook, look.x, look.y);

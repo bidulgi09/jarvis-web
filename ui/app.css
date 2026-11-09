@@ -426,3 +426,90 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--holo);outline-o
 @keyframes partySpin{to{transform:rotate(360deg)}}
 .party .brand{text-shadow:0 0 calc(6px + var(--beat,0)*18px) rgba(255,120,220,.9)}
 @media (prefers-reduced-motion:reduce){.party::before{animation:none}}
+
+/* ── 패널 끌기: 끄는 동안 글자 선택 막기 ── */
+.noSelect, .noSelect *{user-select:none!important;-webkit-user-select:none!important}
+.grabHead > header, .grabAll{user-select:none;-webkit-user-select:none}
+
+/* ── 포스 그랩 ── */
+body.canGrab{cursor:grab}
+body.grabbing, body.grabbing *{cursor:grabbing!important;user-select:none!important;-webkit-user-select:none!important}
+body.bump #sky{animation:bump .22s var(--ease)}
+@keyframes bump{0%{transform:translate(0,0)}30%{transform:translate(3px,-2px)}60%{transform:translate(-2px,2px)}100%{transform:none}}
+.handCursor{position:fixed;left:0;top:0;z-index:60;pointer-events:none;width:0;height:0}
+.handCursor i{position:absolute;left:-17px;top:-17px;width:34px;height:34px;border-radius:50%;border:1.5px solid rgba(127,243,255,.75);box-shadow:0 0 14px rgba(127,243,255,.35);transition:transform .15s var(--ease),background .15s,border-color .15s}
+.handCursor.near i{border-color:#fff;transform:scale(1.25)}
+.handCursor.closed i{background:rgba(127,243,255,.45);transform:scale(.7)}
+
+/* ── 코드 실행 창 ── */
+.codeRun{position:fixed;right:max(20px,env(safe-area-inset-right,0px));top:calc(90px + env(safe-area-inset-top,0px));z-index:30;width:min(440px,calc(100vw - 32px));max-height:min(70vh,560px);display:flex;flex-direction:column;
+  background:rgba(6,8,22,.86);border:1px solid var(--faint);border-radius:12px;backdrop-filter:blur(10px);box-shadow:0 18px 50px rgba(0,0,0,.45);overflow:hidden}
+.codeRun header{display:flex;align-items:center;gap:8px;padding:8px 10px 8px 14px;border-bottom:1px solid var(--faint);font-family:var(--f-mono);font-size:11px;cursor:grab}
+.codeRun header b{font-family:var(--f-display);letter-spacing:.3em;font-size:10px;color:var(--holo)}
+.codeRun .crLang{color:var(--dim);letter-spacing:.15em;font-size:10px}
+.codeRun .crStatus{flex:1;min-width:0;text-align:right;color:var(--dim);font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.codeRun .crStatus.ok{color:#7dffa8} .codeRun .crStatus.bad{color:var(--danger)}
+.codeRun header button{background:none;border:0;color:var(--dim);font:inherit;cursor:pointer;padding:4px 6px;border-radius:6px}
+.codeRun header button:hover{color:var(--ink);background:rgba(255,255,255,.06)}
+.crCodeWrap{margin:0;padding:10px 14px;overflow:auto;max-height:38vh;font-family:var(--f-mono);font-size:12px;line-height:1.5;background:rgba(0,0,0,.25)}
+.crCodeWrap code{background:none!important;padding:0!important;white-space:pre}
+.crOut{margin:0;padding:10px 14px;overflow:auto;flex:1;min-height:44px;font-family:var(--f-mono);font-size:12px;line-height:1.5;white-space:pre-wrap;word-break:break-word;color:#cfe9ff;border-top:1px dashed var(--faint)}
+.crOut.bad{color:#ffb4aa}
+.crNote{padding:6px 14px 9px;font-family:var(--f-mono);font-size:9.5px;color:var(--dim);letter-spacing:.04em}
+
+/* ── 해킹 연출 ── */
+.hack{position:fixed;inset:0;z-index:80;background:rgba(0,6,2,.55);color:#7dffa8;font-family:var(--f-mono);opacity:0;transition:opacity .45s var(--ease);overflow:hidden}
+.hack.open{opacity:1}
+.hack canvas{position:absolute;inset:0;width:100%;height:100%;opacity:.55}
+.hkScan{position:absolute;inset:0;pointer-events:none;background:repeating-linear-gradient(0deg,rgba(0,0,0,.18) 0 1px,transparent 1px 3px);mix-blend-mode:multiply}
+.hkScan::after{content:"";position:absolute;left:0;right:0;height:120px;background:linear-gradient(180deg,transparent,rgba(80,255,140,.07),transparent);animation:scanline 3.2s linear infinite}
+@keyframes scanline{from{top:-120px}to{top:100%}}
+.hkGrid{position:absolute;inset:calc(18px + env(safe-area-inset-top,0px)) max(18px,env(safe-area-inset-right,0px)) calc(18px + env(safe-area-inset-bottom,0px)) max(18px,env(safe-area-inset-left,0px));
+  display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:14px 34vw;pointer-events:none}
+.hkTerm{min-width:0;min-height:0;display:flex;flex-direction:column;background:rgba(0,14,5,.78);border:1px solid rgba(80,255,140,.35);border-radius:6px;box-shadow:0 0 24px rgba(40,255,110,.12),inset 0 0 30px rgba(40,255,110,.05);
+  transform:translateY(12px) scale(.98);opacity:0;transition:transform .5s var(--ease),opacity .5s}
+.hack.open .hkTerm{transform:none;opacity:1}
+.hack.open .hkTerm:nth-child(2){transition-delay:.12s} .hack.open .hkTerm:nth-child(3){transition-delay:.24s} .hack.open .hkTerm:nth-child(4){transition-delay:.36s}
+.hkTerm header{display:flex;justify-content:space-between;padding:6px 10px;font-size:10px;letter-spacing:.2em;color:#b9ffd0;border-bottom:1px solid rgba(80,255,140,.25);background:rgba(40,255,110,.08)}
+.hkTerm header span{color:rgba(125,255,168,.55);letter-spacing:.05em}
+.hkTerm pre{margin:0;padding:8px 10px;flex:1;overflow:hidden;font-size:11px;line-height:1.45;white-space:pre-wrap;word-break:break-all;text-shadow:0 0 6px rgba(60,255,120,.45)}
+.hkTerm pre div:last-child::after{content:"▋";animation:blink 1s steps(1) infinite;margin-left:2px}
+@keyframes blink{50%{opacity:0}}
+.hkTerm .cmd{color:#eaffef} .hkTerm .dim{color:rgba(125,255,168,.55)} .hkTerm .ok{color:#7dffa8} .hkTerm .hi{color:#d6ff7a}
+.hkTerm .warn{color:#ffd86b} .hkTerm .bad{color:#ff6b6b;text-shadow:0 0 8px rgba(255,80,80,.6)}
+.hkCenter{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(32vw,380px);display:grid;justify-items:center;gap:14px;text-align:center;pointer-events:none}
+.hkReticle{position:relative;width:min(22vw,200px);aspect-ratio:1;max-width:100%;border:1px dashed rgba(125,255,168,.45);border-radius:50%;animation:spin 9s linear infinite}
+.hkReticle i{position:absolute;width:22%;height:22%;border:2px solid #7dffa8}
+.hkReticle i:nth-child(1){left:-4%;top:-4%;border-right:0;border-bottom:0}.hkReticle i:nth-child(2){right:-4%;top:-4%;border-left:0;border-bottom:0}
+.hkReticle i:nth-child(3){left:-4%;bottom:-4%;border-right:0;border-top:0}.hkReticle i:nth-child(4){right:-4%;bottom:-4%;border-left:0;border-top:0}
+@keyframes spin{to{transform:rotate(360deg)}}
+.hkTarget{display:grid;gap:3px} .hkTarget small{font-size:10px;letter-spacing:.3em;color:rgba(125,255,168,.6)}
+.hkTarget b{font-family:var(--f-display);font-size:clamp(13px,1.6vw,18px);letter-spacing:.18em;color:#eaffef;text-shadow:0 0 12px rgba(60,255,120,.7)}
+.hkPass{display:flex;gap:4px;justify-content:center;flex-wrap:wrap}
+.hkPass span{display:grid;place-items:center;width:20px;height:26px;border:1px solid rgba(125,255,168,.35);border-radius:3px;font-size:13px;color:rgba(125,255,168,.7);background:rgba(0,20,8,.6)}
+.hkPass span.lock{color:#06140a;background:#7dffa8;border-color:#7dffa8;box-shadow:0 0 10px rgba(125,255,168,.7)}
+.hkProg{width:100%;display:grid;grid-template-columns:1fr auto;gap:4px 10px;font-size:10px;letter-spacing:.1em}
+.hkBar{grid-column:1/-1;height:6px;border:1px solid rgba(125,255,168,.4);border-radius:3px;overflow:hidden}
+.hkBar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#2bd96a,#d6ff7a);box-shadow:0 0 10px #7dffa8;transition:width .6s var(--ease)}
+.hkProg span:first-of-type{text-align:left;color:rgba(125,255,168,.7)}
+.hkResult{font-family:var(--f-display);font-size:clamp(18px,3.2vw,38px);letter-spacing:.22em;opacity:0;transform:scale(1.4);transition:opacity .2s,transform .35s var(--ease);white-space:nowrap}
+.hkResult.show{opacity:1;transform:none}
+.hkResult.denied{color:#ff5a5a;text-shadow:0 0 18px rgba(255,60,60,.8);animation:glitch .35s steps(2) infinite}
+.hkResult.granted{color:#eaffef;text-shadow:0 0 22px #3dff86,0 0 4px #fff;animation:glitch .4s steps(2) 3}
+@keyframes glitch{0%{transform:translate(0)}25%{transform:translate(-3px,1px);clip-path:inset(10% 0 40% 0)}50%{transform:translate(2px,-1px);clip-path:inset(50% 0 5% 0)}75%{transform:translate(-1px,0);clip-path:none}100%{transform:none}}
+.hack.alarm{animation:alarm .5s steps(1) 3}
+.hack.alarm .hkTerm{border-color:rgba(255,90,90,.6)}
+@keyframes alarm{50%{background:rgba(70,0,0,.55)}}
+.hkNote{margin:0;font-size:11px;color:rgba(234,255,239,.75);font-family:var(--f-body)}
+.hkClose{position:absolute;right:max(18px,env(safe-area-inset-right,0px));bottom:calc(18px + env(safe-area-inset-bottom,0px));background:rgba(0,20,8,.7);color:#7dffa8;border:1px solid rgba(125,255,168,.4);border-radius:6px;font:inherit;font-size:11px;padding:7px 12px;cursor:pointer;letter-spacing:.1em}
+body.hacking .hud{opacity:.15;transition:opacity .4s}
+@media (max-width:760px){
+  .hkGrid{grid-template-columns:1fr;grid-template-rows:1fr 1fr;gap:46vh 0}
+  .hkMore{display:none}
+  .hkCenter{width:calc(100vw - 40px)}
+  .hkReticle{width:120px}
+}
+@media (prefers-reduced-motion:reduce){.hkReticle,.hkScan::after,.hkResult{animation:none!important}}
+
+/* 자비스가 접은 카드: 머리줄만 남긴다 */
+.dragbox.min:not(.gen) > :not(header){display:none!important}

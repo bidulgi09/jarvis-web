@@ -630,6 +630,62 @@
   }
  },
  {
+  "name": "ui_control",
+  "label": "화면 조종",
+  "web": "client",
+  "desktop": "ui",
+  "description": "화면의 모든 창·카드·패널을 직접 조종한다. action=list(지금 열린 것·위치·크기 보기, 무엇이 있는지 모르면 먼저 호출), open, close, toggle, close_all(늘 있는 기본 요소와 카메라를 뺀 열린 창 전부 닫기), minimize(머리줄만 남기고 접기), expand, front(맨 앞으로), move(x·y는 화면 왼쪽 위 기준 0~100%), resize(width px), scroll(direction=up|down|top|bottom). target은 날씨, 할 일, 음악, 카메라, 대화 기록, 히스토리, 설정, 코드 실행 창, 해킹 연출, 타이머, 상태판, 자막, 입력창, 로고, 버튼 줄, 또는 만든 패널 제목. 9칸 위치 이동·원래 자리·배치 모드는 arrange_panel을 쓴다.",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "action": {
+     "type": "string",
+     "enum": [
+      "list",
+      "open",
+      "close",
+      "toggle",
+      "close_all",
+      "minimize",
+      "expand",
+      "front",
+      "move",
+      "resize",
+      "scroll"
+     ]
+    },
+    "target": {
+     "type": "string",
+     "description": "창 이름이나 만든 패널 제목"
+    },
+    "x": {
+     "type": "number",
+     "description": "move: 가로 위치 0~100(%)"
+    },
+    "y": {
+     "type": "number",
+     "description": "move: 세로 위치 0~100(%)"
+    },
+    "width": {
+     "type": "number",
+     "description": "resize: 너비(px)"
+    },
+    "direction": {
+     "type": "string",
+     "enum": [
+      "up",
+      "down",
+      "top",
+      "bottom"
+     ]
+    }
+   },
+   "required": [
+    "action"
+   ]
+  }
+ },
+ {
   "name": "set_persona",
   "label": "성격 바꾸기",
   "web": "client",
@@ -674,6 +730,49 @@
    },
    "required": [
     "on"
+   ]
+  }
+ },
+ {
+  "name": "hack_mode",
+  "label": "해킹 연출",
+  "web": "client",
+  "desktop": "ui",
+  "description": "영화 같은 해킹 장면을 화면에 15초쯤 띄운다. 순수 연출이며 실제로는 아무 곳에도 접속하지 않는다. 대상 이름은 가상의 것만(예: 스타크 인더스트리, 해머 테크, 오스코프). 실존 기업·기관·사람 이름이 오면 비슷한 가상 이름으로 바꾼다.",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "target": {
+     "type": "string",
+     "description": "가상의 대상 이름 (영문 대문자로 바뀜, 24자 이하)"
+    }
+   }
+  }
+ },
+ {
+  "name": "run_code",
+  "label": "코드 실행",
+  "web": "client",
+  "desktop": "ui",
+  "description": "자바스크립트나 파이썬 코드를 격리된 샌드박스에서 실행하고 표준 출력·마지막 값·오류를 돌려준다. 계산, 수학, 데이터 처리, 알고리즘 확인, 사용자가 준 코드 돌려보기에 쓴다. 네트워크·파일·화면 접근은 없다. 자바스크립트는 5초, 파이썬은 15초 제한. 파이썬은 첫 실행 때 엔진을 받느라 몇 초 더 걸리고, numpy·pandas·sympy 같은 패키지는 import만 하면 자동으로 받아진다. 결과는 print/console.log로 출력하거나 마지막 줄을 식으로 두면 그 값이 돌아온다. 실행한 코드와 결과는 화면의 코드 창에 보인다.",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "language": {
+     "type": "string",
+     "enum": [
+      "python",
+      "javascript"
+     ]
+    },
+    "code": {
+     "type": "string",
+     "description": "실행할 전체 코드"
+    }
+   },
+   "required": [
+    "language",
+    "code"
    ]
   }
  },
