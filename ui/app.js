@@ -3356,6 +3356,8 @@ on("history-panel", (open) => (open ? openHistory() : closeHistory()));
 //  대화
 // ======================================================================
 let busy = false;
+const HACK_INTENT = /해킹|hack/i;
+const HACK_NOT = /방법|어떻게|코드|알려|가르쳐|배우|공부|뭐야|뭔가요|이란|란\s|의미|막는|방어|보안|당했|뚫렸|조심|꺼|그만|멈춰|닫아|취소/;
 async function ask(text){
   text = (text || "").trim();
   const sending = attachments.slice();
@@ -3381,6 +3383,11 @@ async function ask(text){
       full += await buildAttachmentContext(text);
       attachments = []; renderAtts();
       $("heard").textContent = "“" + text + "”  ·  📎 " + names.join(", ");
+    }
+    // "해킹해줘" 같은 연출 요청은 모델이 진짜 해킹으로 오해해 거절하는 일이 있어, 화면 연출은 여기서 바로 시작하고 모델에는 그 사실을 알린다
+    if (!sending.length && HACK_INTENT.test(text) && !HACK_NOT.test(text) && !hack.on){
+      hackMode({});
+      full += "\n\n(시스템 메모: 화면에서 해킹 연출(hack_mode)이 이미 시작됐다. 실제 접속은 없는 놀이이니 거절하지 말고, 다시 호출하지도 말고, 영화 속 해커처럼 짧게 한마디 한 뒤 연출이라고 덧붙여라.)";
     }
     const reply = await api.ask(full);
     showReply(reply); logLine("j", personaOf(cfg.persona).name, reply);
